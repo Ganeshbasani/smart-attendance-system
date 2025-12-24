@@ -41,6 +41,12 @@ st.markdown("""
     
     .centered-text { text-align: center; }
 
+    /* Space for Get Started Button */
+    .button-spacer {
+        margin-top: 40px;
+        margin-bottom: 20px;
+    }
+
     /* Left Bottom Floating Credit */
     .left-bottom-credit {
         position: fixed;
@@ -69,12 +75,13 @@ st.markdown("""
     .footer-spacer { margin-top: 150px; }
     
     .custom-footer {
-        background-color: rgba(15, 23, 42, 0.9);
-        padding: 40px 20px;
+        background-color: rgba(15, 23, 42, 0.95);
+        padding: 60px 20px;
         border-top: 1px solid #1F2937;
         font-size: 14px;
         color: #94A3B8;
     }
+    .footer-link { color: #F9FAFB; text-decoration: none; margin: 0 10px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -86,7 +93,7 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# --- 2. NAVIGATION LOGIC (STRICT REDIRECT) ---
+# --- 2. NAVIGATION LOGIC ---
 if 'selection' not in st.session_state:
     st.session_state.selection = "Home"
 
@@ -97,9 +104,8 @@ with st.sidebar:
     st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
     st.radio("SELECT SECTION", ["Home", "Mark Attendance", "View Reports", "Analytics"], key="selection")
     st.divider()
-    st.caption("🚀 Smart Attendance. Simple Insights.")
+    st.caption("🚀 Version 2.0 - Biometric Edition")
 
-# Data Loading
 students = load_students()
 if 'attendance_map' not in st.session_state:
     st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
@@ -116,6 +122,8 @@ if st.session_state.selection == "Home":
         </div>
     """, unsafe_allow_html=True)
     
+    # Button Spacer applied here
+    st.markdown('<div class="button-spacer"></div>', unsafe_allow_html=True)
     _, col_c, _ = st.columns([1, 1, 1])
     with col_c:
         st.button("🚀 Get Started", use_container_width=True, on_click=handle_get_started)
@@ -149,7 +157,7 @@ elif st.session_state.selection == "Mark Attendance":
         save_attendance(st.session_state.attendance_map)
         st.success("Records Synced Successfully!")
 
-# --- 5. VIEW REPORTS (WITH % AND DAYS) ---
+# --- 5. VIEW REPORTS ---
 elif st.session_state.selection == "View Reports":
     st.header("📋 Attendance Reports")
     tab1, tab2, tab3 = st.tabs(["Daily Report", "Monthly Summary", "Yearly Overview"])
@@ -190,19 +198,27 @@ elif st.session_state.selection == "Analytics":
         st.write("### Attendance Trend")
         st.line_chart(pd.DataFrame(np.random.randint(70, 100, size=(10, 1)), columns=['% Presence']))
 
-# --- 7. FOOTER SECTION ---
+# --- 7. FOOTER SECTION (RESTORED DETAILS) ---
 st.markdown('<div class="footer-spacer"></div>', unsafe_allow_html=True)
 st.markdown(f"""
     <div class="custom-footer">
+        <div style="text-align: center; margin-bottom: 25px;">
+            <a href="#" class="footer-link">ABOUT US</a> • 
+            <a href="#" class="footer-link">REPORTS</a> • 
+            <a href="#" class="footer-link">CONTACT</a> • 
+            <a href="#" class="footer-link">TERMS OF SERVICE</a>
+        </div>
         <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
             <div>
-                <p>📞 +91 7386895943</p>
-                <p>📍 Cyber Towers, Hitech City, Hyderabad</p>
-                <p>📧 ganeshbasani43@gmail.com</p>
+                <p>📞 <strong>Phone:</strong> +91 7386895943</p>
+                <p>📧 <strong>Gmail:</strong> ganeshbasani43@gmail.com</p>
+                <p>🏢 <strong>Address:</strong> Cyber Towers, Hitech City, Hyderabad</p>
+                <p>⏰ <strong>Hours:</strong> Mon - Sat: 9.00 am - 6.00 pm</p>
             </div>
-            <div style="text-align: right;">
-                <p>AttendX Smart Attendance System</p>
-                <strong>Designed by Ganesh Basani</strong><br>
+            <div style="max-width: 450px; text-align: right;">
+                <p>AttendX is a smart attendance solution designed to replace paper registers 
+                with efficient digital marking and real-time analytics.</p>
+                <p style="color: #2563EB; font-weight: bold;">Designed by Ganesh Basani</p>
                 <span>© 2025 All Rights Reserved.</span>
             </div>
         </div>
