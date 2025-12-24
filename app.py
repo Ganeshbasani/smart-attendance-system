@@ -1,144 +1,93 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime
 from attendance import load_students, save_attendance
 
-st.set_page_config(
-    page_title="AttendX | Smart Attendance System",
-    page_icon="📊",
-    layout="wide"
-)
+# 1. Page Config with your "Brand" Name
+st.set_page_config(page_title="EduTrack Pro", page_icon="🎓", layout="wide")
 
+# 2. Personalized CSS
 st.markdown("""
-<style>
-.brand-title {
-    color: #1E88E5;
-    font-size: 42px;
-    font-weight: 800;
-    margin-bottom: 0;
-}
-.brand-tagline {
-    color: #546E7A;
-    font-size: 18px;
-    margin-bottom: 30px;
-}
-.feature-card {
-    background-color: #ffffff;
-    padding: 20px;
-    border-radius: 12px;
-    border-left: 6px solid #1E88E5;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-}
-.section-title {
-    font-size: 24px;
-    font-weight: 700;
-    margin-top: 20px;
-}
-</style>
-""", unsafe_allow_html=True)
+    <style>
+    /* Gradient Background for Sidebar */
+    [data-testid="stSidebar"] {
+        background-image: linear-gradient(#2e3b4e, #1a2433);
+        color: white;
+    }
+    /* Custom Card Styling */
+    .st-emotion-cache-12w0qpk { 
+        border-radius: 20px; 
+        border: 1px solid #e0e0e0;
+        transition: transform 0.2s ease;
+    }
+    .st-emotion-cache-12w0qpk:hover {
+        transform: translateY(-5px);
+        border: 1px solid #4b6cb7;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-def calculate_grade(attendance_percentage):
-    if attendance_percentage >= 90:
-        return "A"
-    elif attendance_percentage >= 80:
-        return "B"
-    elif attendance_percentage >= 70:
-        return "C"
-    else:
-        return "D"
-
+# 3. Sidebar Personalization
 with st.sidebar:
-    st.markdown("<h2 style='color:#1E88E5;'>AttendX</h2>", unsafe_allow_html=True)
-    page = st.radio(
-        "Navigation",
-        ["Home", "Mark Attendance", "Reports"],
-        label_visibility="collapsed"
-    )
-    st.divider()
-    st.caption("Developed by Basani Ganesh")
-    st.caption("Academic Project")
+    st.markdown("<h1 style='text-align: center; color: white;'>🎓 EduTrack</h1>", unsafe_allow_html=True)
+    st.image("https://cdn-icons-png.flaticon.com/512/3429/3429153.png", width=100) # Replace with local logo path
+    st.markdown("---")
+    st.write(f"📅 **Date:** {datetime.now().strftime('%d %B, %Y')}")
+    
+    # User Personalization
+    user_name = st.text_input("Instructor Name", "Professor Smith")
+    st.success(f"Signed in as: {user_name}")
 
+# 4. Dynamic Greeting
+hour = datetime.now().hour
+greeting = "Good Morning" if hour < 12 else "Good Afternoon" if hour < 18 else "Good Evening"
+st.title(f"{greeting}, {user_name}! 👋")
+st.caption("Here is your attendance overview for today's session.")
+
+# 5. Data & State
 students = load_students()
+if 'attendance_map' not in st.session_state:
+    st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
 
-# ---------------- HOME ----------------
-if page == "Home":
-    st.markdown("<p class='brand-title'>AttendX</p>", unsafe_allow_html=True)
-    st.markdown("<p class='brand-tagline'>Smart Attendance. Simple Insights.</p>", unsafe_allow_html=True)
+# 6. Analytics Section
+p_count = list(st.session_state.attendance_map.values()).count("Present")
+total = len(students)
 
-    st.markdown("<p class='section-title'>Core Features</p>", unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3)
+c1.metric("Students", total)
+c2.metric("Checked In", p_count)
+c3.progress(p_count/total if total > 0 else 0, text=f"{int((p_count/total)*100)}% Capacity")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("<div class='feature-card'><b>Digital Attendance</b><br>Mark attendance quickly and accurately.</div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown("<div class='feature-card'><b>Automated Reports</b><br>Generate weekly, monthly, and yearly summaries.</div>", unsafe_allow_html=True)
-    with c3:
-        st.markdown("<div class='feature-card'><b>Attendance Grading</b><br>Automatic grading based on attendance percentage.</div>", unsafe_allow_html=True)
+st.divider()
 
-# ---------------- MARK ATTENDANCE ----------------
-elif page == "Mark Attendance":
-    st.markdown("<p class='section-title'>Mark Attendance</p>", unsafe_allow_html=True)
-    st.info(f"Date: {datetime.now().strftime('%d %B %Y')}")
+# 7. Search & Filter
+search = st.text_input("🔍 Search Student List", placeholder="Type a name...", label_visibility="collapsed")
 
-    attendance_data = {}
-    search = st.text_input("Search student by name")
+# 8. Personalized Student Cards
+filtered = [s for s in students if search.lower() in s["name"].lower()]
 
-    h1, h2, h3 = st.columns([1, 3, 2])
-    h1.write("ID")
-    h2.write("Student Name")
-    h3.write("Status")
+if not filtered:
+    st.warning("No students found matching that name.")
+else:
+    cols = st.columns(4) # 4 columns for a more dense, app-like look
+    for idx, student in enumerate(filtered):
+        with cols[idx % 4]:
+            with st.container(border=True):
+                # Using a placeholder image if no photo exists
+                st.image("https://www.w3schools.com/howto/img_avatar.png", width=70) 
+                st.markdown(f"**{student['name']}**")
+                st.caption(f"ID: {student['student_id']}")
+                
+                status = st.segmented_control(
+                    "Status",
+                    options=["Present", "Absent", "Late"],
+                    key=f"st_{student['student_id']}",
+                    default=st.session_state.attendance_map.get(student["student_id"], "Absent"),
+                    label_visibility="collapsed"
+                )
+                st.session_state.attendance_map[student["student_id"]] = status
 
-    found = False
-    for s in students:
-        if search.lower() in s["name"].lower():
-            found = True
-            c1, c2, c3 = st.columns([1, 3, 2])
-            c1.write(s["student_id"])
-            c2.write(s["name"])
-            attendance_data[s["student_id"]] = c3.radio(
-                "Status",
-                ["Present", "Absent"],
-                key=s["student_id"],
-                horizontal=True,
-                label_visibility="collapsed"
-            )
-
-    if not found:
-        st.warning("No students found for the given search.")
-
-    if st.button("Save Attendance", type="primary"):
-        save_attendance(attendance_data)
-        st.success("Attendance saved successfully.")
-
-# ---------------- REPORTS ----------------
-elif page == "Reports":
-    st.markdown("<p class='section-title'>Attendance Report</p>", unsafe_allow_html=True)
-
-    report_data = []
-    for s in students:
-        total_classes = 30
-        present_days = 22
-        percentage = round((present_days / total_classes) * 100, 2)
-        grade = calculate_grade(percentage)
-
-        report_data.append({
-            "Student Name": s["name"],
-            "Total Classes": total_classes,
-            "Present Days": present_days,
-            "Attendance %": percentage,
-            "Grade": grade
-        })
-
-    df = pd.DataFrame(report_data)
-    st.dataframe(df, use_container_width=True)
-
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download Report (CSV)",
-        csv,
-        "AttendX_Attendance_Report.csv",
-        "text/csv"
-    )
-
-st.markdown("---")
-st.caption("AttendX – Smart Attendance System | Academic Use")
+# 9. Save Button with Personal Touch
+if st.button("🏁 Finish Session & Sync Records", type="primary", use_container_width=True):
+    save_attendance(st.session_state.attendance_map)
+    st.balloons()
+    st.toast(f"Data synced for {p_count} students!", icon="🚀")
