@@ -4,160 +4,181 @@ import numpy as np
 from datetime import datetime
 from attendance import load_students, save_attendance
 
-# --- 1. APP IDENTITY & CONFIG ---
+# --- 1. APP IDENTITY & THEME CONFIG ---
+# Using the specific hex codes from your specs
 st.set_page_config(page_title="AttendX | Smart Attendance", page_icon="📊", layout="wide")
 
-# Advanced Personalized CSS
-st.markdown("""
+# Custom CSS for the "Soft Blue–Purple" Dark Theme
+st.markdown(f"""
     <style>
-    /* Main Title and Branding */
-    .brand-title { 
-        color: #1E88E5; 
-        font-size: 72px; 
-        font-weight: 900; 
-        margin-bottom: -10px;
-        line-height: 1;
-    }
-    .brand-tagline { 
-        color: #546E7A; 
-        font-size: 20px; 
-        margin-bottom: 30px; 
-    }
+    /* Background & Main Layout */
+    .stApp {{
+        background-color: #0B1120;
+        color: #F9FAFB;
+    }}
     
-    /* Feature & Student Card Styling */
-    .st-emotion-cache-12w0qpk { 
-        background-color: #ffffff !important;
-        border-radius: 15px !important; 
-        padding: 20px !important;
-        border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
-    }
+    /* Hero Title & Text */
+    .hero-title {{
+        color: #2563EB;
+        font-size: 64px;
+        font-weight: 900;
+        margin-bottom: 0px;
+    }}
+    .hero-tagline {{
+        color: #38BDF8;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }}
     
-    /* Fix for text visibility in cards */
-    .st-emotion-cache-12w0qpk p, .st-emotion-cache-12w0qpk h3, .st-emotion-cache-12w0qpk span {
-        color: #1a1a1a !important;
-    }
-
-    /* Gradient Background for Sidebar */
-    [data-testid="stSidebar"] {
-        background-image: linear-gradient(#1E88E5, #1565C0);
-        color: white;
-    }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2 {
+    /* Feature Cards */
+    .feature-card {{
+        background-color: #1F2937;
+        padding: 25px;
+        border-radius: 15px;
+        border-left: 5px solid #F97316;
+        min-height: 180px;
+        margin-bottom: 20px;
+    }}
+    
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {{
+        background-color: #0B1120;
+        border-right: 1px solid #1F2937;
+    }}
+    
+    /* Buttons */
+    .stButton>button {{
+        background-color: #2563EB !important;
         color: white !important;
-    }
+        border-radius: 8px;
+        border: none;
+    }}
+    
+    /* Student Cards visibility fix */
+    div[data-testid="stExpander"] {{
+        background-color: #1F2937 !important;
+        border: none !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. SIDEBAR NAVIGATION ---
+# --- 2. NAVIGATION ---
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center;'>AttendX</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Smart Attendance. Simple Insights.</p>", unsafe_allow_html=True)
-    st.divider()
+    st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
+    page = st.radio("SELECT SECTION", ["Home", "Mark Attendance", "View Reports", "Analytics"], label_visibility="collapsed")
     
-    page = st.radio("MAIN NAVIGATION", ["Home", "Mark Attendance", "View Reports", "Analytics"], label_visibility="collapsed")
-    
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.divider()
-    st.markdown("### 🛠️ Developer Info")
-    st.markdown("**Designed by:** Ganesh Basani")
-    st.caption("📅 **Year:** 2025")
-    st.caption("Academic Project")
+    st.markdown("### 👨‍💻 Developed By")
+    st.markdown("**Ganesh Basani**")
+    st.caption("Academic Project 2025")
 
-# --- 3. DATA & LOGIC INITIALIZATION ---
-students = load_students()
+# --- 3. DATA LOADING ---
+students = load_students() # Ensure your attendance.py has 'gender' key (e.g., "Male" or "Female")
 if 'attendance_map' not in st.session_state:
     st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
 
-# --- 4. NAVIGATION LOGIC ---
-
-# PAGE: HOME / LANDING
+# --- 4. HOME / HERO PAGE ---
 if page == "Home":
-    st.markdown('<p class="brand-title">AttendX</p>', unsafe_allow_html=True)
-    st.markdown('<p class="brand-tagline">Smart Attendance. Simple Insights.</p>', unsafe_allow_html=True)
-    
-    st.subheader("🚀 System Features")
-    f1, f2, f3 = st.columns(3)
-    
-    with f1:
-        with st.container(border=True):
-            st.markdown("### 📱 Digital Marking")
-            st.write("Mark attendance instantly with a clean, mobile-optimized digital interface.")
-    with f2:
-        with st.container(border=True):
-            st.markdown("### 📊 Smart Reports")
-            st.write("Generate weekly, monthly, and yearly insights automatically with one click.")
-    with f3:
-        with st.container(border=True):
-            st.markdown("### 🏷️ Auto-Grading")
-            st.write("Intelligent grading system (A-D) based on real-time attendance percentage.")
+    # Hero Section
+    col1, col2 = st.columns([1.5, 1])
+    with col1:
+        st.markdown('<p class="hero-title">AttendX</p>', unsafe_allow_html=True)
+        st.markdown('<p class="hero-tagline">Smart Attendance. Real-Time Insights.</p>', unsafe_allow_html=True)
+        st.write("Replace paper registers with seamless digital marking and powerful analytics. AttendX provides a modern approach to managing classroom and office presence.")
+        
+        c1, c2 = st.columns(2)
+        with c1: st.button("🚀 Get Started", use_container_width=True)
+        with c2: st.button("📺 View Demo", use_container_width=True)
+        
+    with col2:
+        # Illustration placeholder
+        st.image("https://img.freepik.com/free-vector/gradient-ui-ux-background_23-2149051557.jpg", use_container_width=True)
 
-# PAGE: MARK ATTENDANCE
+    st.markdown("---")
+    
+    # Feature Cards Section
+    st.subheader("Key Capabilities")
+    f1, f2, f3 = st.columns(3)
+    features = [
+        ("📱 Digital Marking", "Mark attendance instantly via web or mobile interface."),
+        ("📊 Smart Reports", "Generate automated insights with detailed export options."),
+        ("🏷️ Auto-Grading", "Intelligent A-D grading based on participation levels.")
+    ]
+    for i, (title, desc) in enumerate(features):
+        with [f1, f2, f3][i]:
+            st.markdown(f"""<div class="feature-card"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
+
+# --- 5. ATTENDANCE MARKING (CORE LOGIC) ---
 elif page == "Mark Attendance":
     st.header("📝 Mark Attendance")
-    st.info(f"📅 **Session Date:** {datetime.now().strftime('%A, %d %B %Y')}")
+    st.info(f"📅 Session Date: {datetime.now().strftime('%d %B, %Y')}")
     
-    # Search Bar
-    search = st.text_input("🔍 Search Student Database", placeholder="Type a name...", label_visibility="collapsed")
+    search = st.text_input("🔍 Search Student", placeholder="Search by name...", label_visibility="collapsed")
+    
+    # Student List with Gender Emojis
+    cols = st.columns(3)
     filtered = [s for s in students if search.lower() in s["name"].lower()]
-
-    # Student Grid
-    cols = st.columns(4)
+    
     for idx, student in enumerate(filtered):
-        with cols[idx % 4]:
+        with cols[idx % 3]:
             with st.container(border=True):
-                st.image("https://www.w3schools.com/howto/img_avatar.png", width=60) 
-                st.markdown(f"**{student['name']}**")
+                # Gender Emoji Logic
+                # Assumes 'gender' exists in your load_students() data
+                gender_icon = "👦" if student.get("gender") == "Male" else "👧"
+                
+                st.markdown(f"### {gender_icon} {student['name']}")
                 st.caption(f"ID: {student['student_id']}")
                 
                 status = st.segmented_control(
-                    "Status",
-                    options=["Present", "Absent"],
-                    key=f"id_{student['student_id']}",
+                    "Status", ["Present", "Absent"],
+                    key=f"st_{student['student_id']}",
                     default=st.session_state.attendance_map.get(student["student_id"], "Absent"),
                     label_visibility="collapsed"
                 )
                 st.session_state.attendance_map[student["student_id"]] = status
 
-    if st.button("🏁 Finish Session & Sync Records", type="primary", use_container_width=True):
+    if st.button("✅ Save & Sync Records", type="primary"):
         save_attendance(st.session_state.attendance_map)
+        st.success("Database Updated!")
         st.balloons()
-        st.toast("Attendance data synced successfully!", icon="🚀")
 
-# PAGE: REPORTS
+# --- 6. REPORTS SECTION ---
 elif page == "View Reports":
-    st.header("📋 Attendance Reports")
+    st.header("📋 Reports Vault")
     
-    # Example Grading Calculation
-    report_list = []
-    for s in students:
-        # Mocking attendance % for demonstration
-        perc = np.random.randint(60, 100)
-        if perc >= 90: grade = "A"
-        elif perc >= 80: grade = "B"
-        elif perc >= 70: grade = "C"
-        else: grade = "D"
-        
-        report_list.append({
-            "Name": s["name"],
-            "Attendance %": perc,
-            "Grade": grade
-        })
+    report_type = st.tabs(["📅 Weekly", "🗓️ Monthly", "📊 Yearly"])
     
-    df = pd.DataFrame(report_list)
-    st.dataframe(df, use_container_width=True)
-    
-    st.download_button("📥 Download Report (CSV)", data=df.to_csv().encode('utf-8'), file_name="attendance.csv")
+    for tab in report_type:
+        with tab:
+            # Generate dummy reporting data
+            data = pd.DataFrame({
+                "Student Name": [s["name"] for s in students],
+                "Classes Attended": [np.random.randint(5, 20) for _ in students],
+                "Attendance %": [np.random.randint(60, 100) for _ in students]
+            })
+            st.dataframe(data, use_container_width=True)
+            st.download_button("📥 Export CSV", data=data.to_csv().encode('utf-8'), file_name="attendx_report.csv")
 
-# PAGE: ANALYTICS
-elif page == "Analytics":
-    st.header("📈 Analytics & Visualization")
-    chart_data = pd.DataFrame({
-        "Student": [s["name"] for s in students],
-        "Attendance %": [np.random.randint(50, 100) for _ in students]
-    })
-    st.bar_chart(chart_data, x="Student", y="Attendance %", color="#1E88E5")
-
-# --- 5. FOOTER ---
+# --- 7. FOOTER SECTION ---
+st.markdown("<br><br><br>", unsafe_allow_html=True)
 st.divider()
-st.caption(f"AttendX – Smart Attendance System | Designed by Ganesh Basani | © 2025")
+
+f_col1, f_col2, f_col3 = st.columns(3)
+
+with f_col1:
+    st.markdown("### 🏢 AttendX")
+    st.caption("Smart Attendance. Simple Insights.")
+    st.caption("© 2025 All Rights Reserved.")
+
+with f_col2:
+    st.markdown("### 📞 Contact Details")
+    st.markdown("📧 ganeshbasani43@gmail.com")
+    st.markdown("📱 +91 7386895943")
+
+with f_col3:
+    st.markdown("### 📍 Location")
+    st.markdown("Cyber Towers, Hitech City")
+    st.markdown("Hyderabad, Telangana, India")
+
+st.markdown("<p style='text-align: center; color: #38BDF8;'>Designed by Ganesh Basani</p>", unsafe_allow_html=True)
