@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 from attendance import load_students, save_attendance
 
-# --- 1. APP IDENTITY & THEME CONFIG (STRICTLY PRESERVED) ---
+# --- 1. APP IDENTITY & THEME CONFIG (NO CHANGES MADE) ---
 st.set_page_config(page_title="AttendX | Smart Attendance", page_icon="📊", layout="wide")
 
 st.markdown("""
@@ -37,26 +37,26 @@ st.markdown("""
         background-color: rgba(15, 23, 42, 0.9); padding: 40px 20px;
         border-top: 1px solid #1F2937; font-size: 14px; color: #94A3B8;
     }
+    .footer-link { color: #F9FAFB; text-decoration: none; margin: 0 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. THE NAVIGATION REPAIR ---
-# We use st.session_state.selection as the "Source of Truth"
+# --- 2. NAVIGATION LOGIC (STRICT REDIRECT FIX) ---
 if 'selection' not in st.session_state:
     st.session_state.selection = "Home"
 
-# Logic for "Get Started" Redirect
+# Function to handle redirect
 def handle_get_started():
     st.session_state.selection = "Mark Attendance"
 
 with st.sidebar:
     st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
     
-    # CRITICAL: We bind the radio button directly to the session state key 'selection'
+    # Linked directly to session state to prevent refresh loops
     st.radio(
         "SELECT SECTION", 
         ["Home", "Mark Attendance", "View Reports", "Analytics"], 
-        key="selection"
+        key="selection" 
     )
 
     st.divider()
@@ -82,7 +82,7 @@ if st.session_state.selection == "Home":
     
     col_l, col_c, col_r = st.columns([1, 1, 1])
     with col_c:
-        # This button now updates 'selection' via the callback function
+        # Callback updates 'selection' which is tied to the sidebar radio
         st.button("🚀 Get Started", use_container_width=True, on_click=handle_get_started)
 
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -135,7 +135,7 @@ elif st.session_state.selection == "Analytics":
     with m2: st.markdown(f'<div class="feature-card"><h3>Present</h3><h1 style="color:#22C55E;">{present}</h1></div>', unsafe_allow_html=True)
     with m3: st.markdown(f'<div class="feature-card"><h3>Rate</h3><h1>{rate:.1f}%</h1></div>', unsafe_allow_html=True)
 
-# --- 7. FOOTER SECTION ---
+# --- 7. FOOTER SECTION (STRICTLY PRESERVED) ---
 st.markdown('<div class="footer-spacer"></div>', unsafe_allow_html=True)
 st.markdown(f"""
     <div class="custom-footer">
