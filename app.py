@@ -7,21 +7,17 @@ from attendance import load_students, save_attendance
 # --- 1. APP IDENTITY & THEME CONFIG ---
 st.set_page_config(page_title="AttendX | Smart Attendance", page_icon="📊", layout="wide")
 
-# Advanced CSS for Biometric Background, Animations, and Layout
+# CSS for Biometric Background, Animations, and Layout
 st.markdown("""
     <style>
-    /* 1. Global Animations */
+    /* Global Animations for the Title */
     @keyframes titleGlow {
         0% { opacity: 0; transform: scale(0.9); text-shadow: 0 0 0px #2563EB; }
         50% { opacity: 1; transform: scale(1.05); text-shadow: 0 0 20px #2563EB; }
-        100% { transform: scale(1); text-shadow: 0 0 10px #2563EB; }
-    }
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateX(-50px); }
-        to { opacity: 1; transform: translateX(0); }
+        100% { opacity: 1; transform: scale(1); text-shadow: 0 0 10px #2563EB; }
     }
     
-    /* 2. Biometric Transparent Background */
+    /* Biometric Transparent Background */
     .stApp {
         background: linear-gradient(rgba(11, 17, 32, 0.85), rgba(11, 17, 32, 0.85)), 
                     url('https://www.transparenttextures.com/patterns/carbon-fibre.png'),
@@ -33,22 +29,19 @@ st.markdown("""
         color: #F9FAFB;
     }
 
-    /* 3. Animated App Name */
+    /* Animated App Name */
     .animated-title {
         color: #2563EB;
-        font-size: 100px; /* Larger as requested */
+        font-size: 100px;
         font-weight: 900;
         text-align: center;
         animation: titleGlow 2.5s ease-out;
         margin-bottom: 0px;
     }
     
-    .centered-text {
-        text-align: center;
-        animation: fadeIn 3s ease-in;
-    }
+    .centered-text { text-align: center; }
 
-    /* 4. Left Bottom Floating Credit */
+    /* Left Bottom Floating Credit */
     .left-bottom-credit {
         position: fixed;
         bottom: 20px;
@@ -56,27 +49,36 @@ st.markdown("""
         font-size: 14px;
         color: #94A3B8;
         z-index: 100;
-        background: rgba(31, 41, 55, 0.6);
-        padding: 10px;
+        background: rgba(31, 41, 55, 0.8);
+        padding: 10px 15px;
         border-radius: 8px;
-        border-left: 3px solid #2563EB;
+        border-left: 4px solid #2563EB;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
 
-    /* 5. Card & Analytics Spacing */
+    /* Card Styling */
     .feature-card {
         background-color: rgba(31, 41, 55, 0.7);
         padding: 25px;
         border-radius: 15px;
         border-bottom: 4px solid #2563EB;
         text-align: center;
-        margin-bottom: 30px; /* Gap maintained */
+        margin-bottom: 30px;
     }
     
     .footer-spacer { margin-top: 150px; }
+    
+    .custom-footer {
+        background-color: rgba(15, 23, 42, 0.9);
+        padding: 40px 20px;
+        border-top: 1px solid #1F2937;
+        font-size: 14px;
+        color: #94A3B8;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# Floating Credit
+# Floating Left Bottom Credit
 st.markdown("""
     <div class="left-bottom-credit">
         Designed by: Ganesh Basani<br>
@@ -95,9 +97,9 @@ with st.sidebar:
     st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
     st.radio("SELECT SECTION", ["Home", "Mark Attendance", "View Reports", "Analytics"], key="selection")
     st.divider()
-    st.caption("🚀 Version 2.0 - Biometric Edition")
+    st.caption("🚀 Smart Attendance. Simple Insights.")
 
-# Data Setup
+# Data Loading
 students = load_students()
 if 'attendance_map' not in st.session_state:
     st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
@@ -114,7 +116,7 @@ if st.session_state.selection == "Home":
         </div>
     """, unsafe_allow_html=True)
     
-    col_l, col_c, col_r = st.columns([1, 1, 1])
+    _, col_c, _ = st.columns([1, 1, 1])
     with col_c:
         st.button("🚀 Get Started", use_container_width=True, on_click=handle_get_started)
 
@@ -150,48 +152,43 @@ elif st.session_state.selection == "Mark Attendance":
 # --- 5. VIEW REPORTS (WITH % AND DAYS) ---
 elif st.session_state.selection == "View Reports":
     st.header("📋 Attendance Reports")
-    tab1, tab2, tab3 = st.tabs(["Daily", "Monthly Summary", "Yearly Overview"])
+    tab1, tab2, tab3 = st.tabs(["Daily Report", "Monthly Summary", "Yearly Overview"])
     
-    def get_rep(total):
-        lst = []
+    def generate_report(days):
+        data = []
         for s in students:
-            pre = np.random.randint(0, total + 1)
-            perc = (pre/total)*100 if total > 0 else 0
-            lst.append({"Name": s["name"], "ID": s["student_id"], "Days Present": f"{pre}/{total}", "Attendance %": f"{perc:.1f}%"})
-        return pd.DataFrame(lst)
+            pre = np.random.randint(0, days + 1)
+            perc = (pre/days)*100 if days > 0 else 0
+            data.append({"Name": s["name"], "ID": s["student_id"], "Days Present": f"{pre}/{days}", "Attendance %": f"{perc:.1f}%"})
+        return pd.DataFrame(data)
 
     with tab1:
         st.dataframe(pd.DataFrame([{"Name": s["name"], "Status": st.session_state.attendance_map.get(s["student_id"], "Absent")} for s in students]), use_container_width=True)
     with tab2:
-        st.dataframe(get_rep(22), use_container_width=True)
+        st.dataframe(generate_report(22), use_container_width=True)
     with tab3:
-        st.dataframe(get_rep(220), use_container_width=True)
+        st.dataframe(generate_report(220), use_container_width=True)
 
-# --- 6. ANALYTICS (WITH GRAPHS & GAPS) ---
+# --- 6. ANALYTICS ---
 elif st.session_state.selection == "Analytics":
-    st.header("📈 Attendance Analytics")
-    
+    st.header("📈 System Analytics")
     total = len(students)
     present = list(st.session_state.attendance_map.values()).count("Present")
     absent = total - present
-
-    # Metric Cards
+    
     m1, m2, m3 = st.columns(3)
     with m1: st.markdown(f'<div class="feature-card"><h3>Total</h3><h1>{total}</h1></div>', unsafe_allow_html=True)
     with m2: st.markdown(f'<div class="feature-card"><h3>Present</h3><h1>{present}</h1></div>', unsafe_allow_html=True)
     with m3: st.markdown(f'<div class="feature-card"><h3>Absent</h3><h1>{absent}</h1></div>', unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True) # Gap
-
-    # Graphs
+    st.markdown("<br>", unsafe_allow_html=True)
     g1, g2 = st.columns(2)
     with g1:
         st.write("### Presence Distribution")
-        st.bar_chart({"Status": ["Present", "Absent"], "Count": [present, absent]}, x="Status", y="Count", color="#2563EB")
+        st.bar_chart({"Status": ["Present", "Absent"], "Count": [present, absent]}, x="Status", y="Count")
     with g2:
         st.write("### Attendance Trend")
-        chart_data = pd.DataFrame(np.random.randint(70, 100, size=(10, 1)), columns=['% Presence'])
-        st.line_chart(chart_data)
+        st.line_chart(pd.DataFrame(np.random.randint(70, 100, size=(10, 1)), columns=['% Presence']))
 
 # --- 7. FOOTER SECTION ---
 st.markdown('<div class="footer-spacer"></div>', unsafe_allow_html=True)
@@ -205,7 +202,8 @@ st.markdown(f"""
             </div>
             <div style="text-align: right;">
                 <p>AttendX Smart Attendance System</p>
-                <strong>Designed by Ganesh Basani</strong>
+                <strong>Designed by Ganesh Basani</strong><br>
+                <span>© 2025 All Rights Reserved.</span>
             </div>
         </div>
     </div>
