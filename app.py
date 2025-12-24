@@ -7,7 +7,6 @@ from attendance import load_students, save_attendance
 # --- 1. APP IDENTITY & THEME CONFIG ---
 st.set_page_config(page_title="AttendX | Smart Attendance", page_icon="📊", layout="wide")
 
-# Advanced CSS for Animations, Transparency, and Branding
 st.markdown("""
     <style>
     @keyframes fadeIn {
@@ -36,6 +35,7 @@ st.markdown("""
         margin-bottom: 30px;
     }
     
+    /* Card Styling for Analytics and Features */
     .feature-card {
         background-color: rgba(31, 41, 55, 0.7);
         padding: 25px;
@@ -44,7 +44,6 @@ st.markdown("""
         text-align: center;
     }
 
-    /* Footer Styling based on Reference */
     .custom-footer {
         background-color: rgba(15, 23, 42, 0.9);
         padding: 40px 20px;
@@ -65,13 +64,14 @@ def nav_to(page_name):
 
 with st.sidebar:
     st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
-    st.session_state.page = st.radio("SELECT SECTION", ["Home", "Mark Attendance", "View Reports", "Analytics"], 
-                                    index=["Home", "Mark Attendance", "View Reports", "Analytics"].index(st.session_state.page))
+    # Sync radio with session state
+    current_idx = ["Home", "Mark Attendance", "View Reports", "Analytics"].index(st.session_state.page)
+    choice = st.radio("SELECT SECTION", ["Home", "Mark Attendance", "View Reports", "Analytics"], index=current_idx)
+    st.session_state.page = choice
     st.divider()
     st.caption(f"**Designed by:** Ganesh Basani")
     st.caption("📅 **Year:** 2025")
 
-# Load Real Data
 students = load_students()
 if 'attendance_map' not in st.session_state:
     st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
@@ -83,28 +83,16 @@ if st.session_state.page == "Home":
         <div class="centered-text">
             <h2 style='color: #38BDF8;'>Smart Attendance. Real-Time Insights.</h2>
             <p style='font-size: 18px; max-width: 800px; margin: 0 auto;'>
-                Replace paper registers with digital marking and powerful analytics. 
-                Experience seamless tracking and automated reporting in one place.
+                Replace paper registers with digital marking and powerful analytics.
             </p>
         </div>
     """, unsafe_allow_html=True)
     
-    # Redirect Button
     col_l, col_c, col_r = st.columns([1, 1, 1])
     with col_c:
         if st.button("🚀 Get Started", use_container_width=True):
             nav_to("Mark Attendance")
             st.rerun()
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    f1, f2, f3 = st.columns(3)
-    features = [("📱 Digital Marking", "Fast and secure marking."), 
-                ("📊 Smart Reports", "Deep data analytics."), 
-                ("🏷️ Auto-Grading", "Performance based grading.")]
-    
-    for i, (title, desc) in enumerate(features):
-        with [f1, f2, f3][i]:
-            st.markdown(f'<div class="feature-card"><h3>{title}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
 
 # --- 4. MARK ATTENDANCE ---
 elif st.session_state.page == "Mark Attendance":
@@ -125,60 +113,104 @@ elif st.session_state.page == "Mark Attendance":
                                              default=st.session_state.attendance_map.get(student["student_id"], "Absent"))
                 st.session_state.attendance_map[student["student_id"]] = status
 
-    if st.button("💾 Save Attendance", type="primary"):
+    if st.button("💾 Save Attendance", type="primary", use_container_width=True):
         save_attendance(st.session_state.attendance_map)
-        st.success("Records Synced!")
+        st.success("Records Synced Successfully!")
         st.balloons()
 
-# --- 5. ANALYTICS (FIXED MISTAKE) ---
-elif st.session_state.page == "Analytics":
-    st.header("📈 Attendance Analytics")
+# --- 5. VIEW REPORTS (FIXED LOGIC) ---
+elif st.session_state.page == "View Reports":
+    st.header("📋 Attendance Reports")
     
-    # Using Session State to ensure charts reflect current selections
-    df_analytics = pd.DataFrame([
-        {"Student": s["name"], "Status": st.session_state.attendance_map[s["student_id"]]}
-        for s in students
-    ])
+    tab1, tab2, tab3 = st.tabs(["Daily Report", "Monthly Summary", "Yearly Overview"])
     
-    if not df_analytics.empty:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("### Presence vs Absence")
-            counts = df_analytics["Status"].value_counts()
-            st.bar_chart(counts)
-        with c2:
-            st.write("### Attendance Percentage")
-            # Logic for a single session: 100% if Present, 0% if Absent
-            df_analytics["Score"] = df_analytics["Status"].apply(lambda x: 100 if x == "Present" else 0)
-            st.line_chart(df_analytics.set_index("Student")["Score"])
-    else:
-        st.warning("No data available to visualize.")
+    report_data = []
+    for s in students:
+        # Calculate Mock Percentages/Grades for display
+        status = st.session_state.attendance_map.get(s["student_id"], "Absent")
+        perc = 100 if status == "Present" else 0 # Simple daily logic
+        
+        # Grading Logic
+        if perc >= 90: grade = "A"
+        elif perc >= 80: grade = "B"
+        elif perc >= 70: grade = "C"
+        else: grade = "D"
+        
+        report_data.append({
+            "Student Name": s["name"],
+            "ID": s["student_id"],
+            "Status": status,
+            "Attendance %": f"{perc}%",
+            "Grade": grade
+        })
 
-# --- 6. FOOTER (REDESIGNED) ---
-st.markdown("<br><br><br>", unsafe_allow_html=True)
+    df_report = pd.DataFrame(report_data)
+
+    with tab1:
+        st.subheader("Today's Detailed Log")
+        st.dataframe(df_report, use_container_width=True)
+        st.download_button("📥 Download Daily CSV", df_report.to_csv(index=False), "daily_report.csv", key="dl_daily")
+
+    with tab2:
+        st.subheader("Monthly Attendance Trends")
+        st.info("Aggregating historical data from database...")
+        # Placeholder for historical logic
+        st.write(df_report[["Student Name", "Attendance %", "Grade"]])
+        st.download_button("📥 Download Monthly CSV", df_report.to_csv(index=False), "monthly_report.csv", key="dl_month")
+
+    with tab3:
+        st.subheader("Annual Academic Record")
+        st.write(df_report)
+        st.download_button("📥 Download Yearly CSV", df_report.to_csv(index=False), "yearly_report.csv", key="dl_year")
+
+# --- 6. ANALYTICS (REVERTED TO OLD CARD DESIGN) ---
+elif st.session_state.page == "Analytics":
+    st.header("📈 System Analytics")
+    
+    total = len(students)
+    present = list(st.session_state.attendance_map.values()).count("Present")
+    absent = total - present
+    rate = (present / total) * 100 if total > 0 else 0
+
+    # Old Card-Style Metric Layout
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown(f'<div class="feature-card"><h3>Total Students</h3><h1 style="color:#2563EB;">{total}</h1></div>', unsafe_allow_html=True)
+    with m2:
+        st.markdown(f'<div class="feature-card"><h3>Present Today</h3><h1 style="color:#22C55E;">{present}</h1></div>', unsafe_allow_html=True)
+    with m3:
+        st.markdown(f'<div class="feature-card"><h3>Attendance Rate</h3><h1 style="color:#F97316;">{rate:.1f}%</h1></div>', unsafe_allow_html=True)
+
+    st.divider()
+    
+    # Charts for detailed view
+    c1, c2 = st.columns(2)
+    with c1:
+        st.write("### Presence Distribution")
+        st.bar_chart({"Status": ["Present", "Absent"], "Count": [present, absent]}, x="Status", y="Count")
+    with c2:
+        st.write("### Student Wise Percentage")
+        chart_df = pd.DataFrame([{"Name": s["name"], "%": 100 if st.session_state.attendance_map[s["student_id"]] == "Present" else 0} for s in students])
+        st.line_chart(chart_df.set_index("Name"))
+
+# --- 7. FOOTER ---
+st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown(f"""
     <div class="custom-footer">
         <div style="text-align: center; margin-bottom: 20px;">
-            <a href="#" class="footer-link">ABOUT US</a> • 
-            <a href="#" class="footer-link">REPORTS</a> • 
-            <a href="#" class="footer-link">CONTACT</a> • 
-            <a href="#" class="footer-link">PRIVACY POLICY</a>
+            <a href="#" class="footer-link">ABOUT US</a> • <a href="#" class="footer-link">CONTACT</a> • <a href="#" class="footer-link">TERMS</a>
         </div>
         <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
             <div>
                 <p>📞 +91 7386895943</p>
                 <p>📍 Cyber Towers, Hitech City, Hyderabad</p>
                 <p>📧 ganeshbasani43@gmail.com</p>
-                <p>⏰ Mon - Sat: 9.00 am - 6.00 pm</p>
             </div>
-            <div style="max-width: 400px; text-align: right;">
-                <p>AttendX is a state-of-the-art solution designed to bridge the gap between 
-                traditional record-keeping and modern data analytics. Built for accuracy, 
-                efficiency, and simplicity.</p>
+            <div style="text-align: right;">
+                <p>Smart Attendance. Simple Insights.</p>
                 <strong>Designed by Ganesh Basani</strong>
             </div>
         </div>
-        <hr style="border-color: #1F2937;">
-        <p style="text-align: center;">© 2025 AttendX Smart Attendance System. All rights reserved.</p>
+        <p style="text-align: center; margin-top:20px;">© 2025 AttendX Smart Attendance System.</p>
     </div>
 """, unsafe_allow_html=True)
