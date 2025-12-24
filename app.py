@@ -1,88 +1,82 @@
 import streamlit as st
 from attendance import load_students, save_attendance
 
-# 1. Page Configuration
-st.set_page_config(page_title="Smart Attendence", page_icon="📘", layout="wide")
+# 1. Advanced Page Config
+st.set_page_config(page_title="Smart Attendance Pro", layout="wide", initial_sidebar_state="expanded")
 
-# 2. Custom CSS for High-Tech Look
+# 2. Enhanced CSS (The "Attractive" Layer)
 st.markdown("""
     <style>
-    /* Main background and font */
-    .stApp { background-color: #f8f9fa; }
+    .main { background-color: #f0f2f6; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    div[data-testid="stExpander"] { border: none !important; box-shadow: none !important; }
     
-    /* Customizing the 'Card' look */
-    [data-testid="stVerticalBlockBorderWrapper"] {
+    /* Custom Styling for the Student Cards */
+    .student-card {
         background-color: white;
+        padding: 20px;
         border-radius: 15px;
-        padding: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    
-    /* Make the Save button pop */
-    .stButton>button {
-        width: 100%;
-        border-radius: 10px;
-        background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-        color: white;
-        font-weight: bold;
-        border: none;
-        padding: 10px;
+        border-left: 5px solid #4b6cb7;
+        margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Header & Search
-st.title("📘 Smart Attendance System")
-search_query = st.text_input("🔍 Search student by name or ID...", placeholder="Type to filter...")
-
-# 4. State Management
+# 3. Logic & Data Initialization
 students = load_students()
-if "attendance_data" not in st.session_state:
-    st.session_state.attendance_data = {s["student_id"]: "Absent" for s in students}
 
-# 5. Real-time Metrics Dashboard
-total_students = len(students)
-present_count = list(st.session_state.attendance_data.values()).count("Present")
-absent_count = total_students - present_count
+# IMPORTANT: Initialize session state so data isn't lost during reruns
+if 'attendance_map' not in st.session_state:
+    st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
+
+# 4. Header Section
+st.title("📘 Smart Attendance System")
+t1, t2 = st.columns([2, 1])
+with t1:
+    search = st.text_input("🔍 Quick Search", placeholder="Enter student name...", label_visibility="collapsed")
+with t2:
+    # Quick Action to mark everyone present (Convenience feature)
+    if st.button("✅ Mark All Present"):
+        for s in students: st.session_state.attendance_map[s["student_id"]] = "Present"
+        st.rerun()
+
+# 5. Live Analytics Dashboard
+present_count = list(st.session_state.attendance_map.values()).count("Present")
+total = len(students)
 
 m1, m2, m3 = st.columns(3)
-m1.metric("Total Enrolled", total_students)
-m2.metric("Present Today", present_count, delta=f"{present_count} marked", delta_color="normal")
-m3.metric("Attendance Rate", f"{(present_count/total_students)*100:.1f}%")
+m1.metric("Enrolled", total)
+m2.metric("Checked In", present_count, delta=f"{present_count - total} remaining", delta_color="inverse")
+m3.metric("Attendance %", f"{(present_count/total)*100:.0f}%")
 
 st.divider()
 
-# 6. Student Grid Layout
-st.subheader("Student Directory")
-filtered_students = [s for s in students if search_query.lower() in s["name"].lower()]
-
-# Display in a 3-column grid
+# 6. Optimized Student Grid
+filtered_students = [s for s in students if search.lower() in s["name"].lower()]
 cols = st.columns(3)
-for i, student in enumerate(filtered_students):
-    with cols[i % 3]:
-        with st.container(border=True):
-            # Student Info
-            c1, c2 = st.columns([1, 3])
-            with c1:
-                st.write("👤") # Placeholder for Avatar
-            with c2:
-                st.markdown(f"**{student['name']}**")
-                st.caption(f"ID: {student['student_id']}")
-            
-            # Action: Toggle Status
-            # Using pills for a sleek button-toggle feel
-            status = st.pills(
-                label="Attendance Status",
-                options=["Present", "Absent"],
-                key=f"pill_{student['student_id']}",
-                label_visibility="collapsed",
-                default=st.session_state.attendance_data[student["student_id"]]
-            )
-            st.session_state.attendance_data[student["student_id"]] = status
 
-# 7. Action Bar
-st.sidebar.header("Actions")
-if st.sidebar.button("🚀 Finalize & Save"):
-    save_attendance(st.session_state.attendance_data)
-    st.sidebar.success("Database Updated!")
-    st.balloons()
+for idx, student in enumerate(filtered_students):
+    with cols[idx % 3]:
+        # Using the new "border" container for a card effect
+        with st.container(border=True):
+            st.markdown(f"### {student['name']}")
+            st.caption(f"🆔 {student['student_id']}")
+            
+            # Using segmented_control or pills for modern feel
+            status = st.segmented_control(
+                "Status",
+                options=["Present", "Absent"],
+                key=f"status_{student['student_id']}",
+                default=st.session_state.attendance_map[student["student_id"]],
+                label_visibility="collapsed"
+            )
+            # Update state immediately
+            st.session_state.attendance_map[student["student_id"]] = status
+
+# 7. Fixed Footer Action
+st.sidebar.markdown("---")
+st.sidebar.header("System Controls")
+if st.sidebar.button("💾 Save to Database", use_container_width=True, type="primary"):
+    save_attendance(st.session_state.attendance_map)
+    st.sidebar.success("Records Locked!")
+    st.toast("Attendance saved successfully!", icon="✅")
