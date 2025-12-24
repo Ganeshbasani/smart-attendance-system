@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime
 from attendance import load_students, save_attendance
 
-# --- 1. APP IDENTITY & THEME CONFIG (STRICTLY KEPT) ---
+# --- 1. APP IDENTITY & THEME CONFIG (STRICTLY PRESERVED) ---
 st.set_page_config(page_title="AttendX | Smart Attendance", page_icon="📊", layout="wide")
 
 st.markdown("""
@@ -13,8 +13,6 @@ st.markdown("""
         from { opacity: 0; transform: translateY(-20px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    
-    /* ADDED: Biometric Transparent Background Overlay */
     .stApp {
         background: linear-gradient(rgba(11, 17, 32, 0.85), rgba(11, 17, 32, 0.85)), 
                     url('https://www.transparenttextures.com/patterns/carbon-fibre.png'),
@@ -25,58 +23,53 @@ st.markdown("""
         background-color: #0B1120;
         color: #F9FAFB;
     }
-    
     .animated-title {
         color: #2563EB; font-size: 85px; font-weight: 900; text-align: center;
         animation: fadeIn 2s ease-in-out; margin-bottom: 0px;
     }
     .centered-text { text-align: center; margin-bottom: 30px; }
-    
     .feature-card {
         background-color: rgba(31, 41, 55, 0.7); padding: 25px; border-radius: 15px;
         border-bottom: 4px solid #2563EB; text-align: center;
     }
-
-    /* ADDED: Spacer to push footer further down */
     .footer-spacer { margin-top: 150px; }
-
     .custom-footer {
         background-color: rgba(15, 23, 42, 0.9); padding: 40px 20px;
         border-top: 1px solid #1F2937; font-size: 14px; color: #94A3B8;
     }
-    .footer-link { color: #F9FAFB; text-decoration: none; margin: 0 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. NAVIGATION LOGIC (STOPS CALLBACK LOOP) ---
-if 'page' not in st.session_state:
-    st.session_state.page = "Home"
+# --- 2. THE NAVIGATION REPAIR ---
+# We use st.session_state.selection as the "Source of Truth"
+if 'selection' not in st.session_state:
+    st.session_state.selection = "Home"
 
 # Logic for "Get Started" Redirect
 def handle_get_started():
-    st.session_state.page = "Mark Attendance"
+    st.session_state.selection = "Mark Attendance"
 
 with st.sidebar:
     st.markdown("<h1 style='color: #2563EB;'>AttendX</h1>", unsafe_allow_html=True)
-    nav_list = ["Home", "Mark Attendance", "View Reports", "Analytics"]
-    current_index = nav_list.index(st.session_state.page)
     
-    choice = st.radio("SELECT SECTION", nav_list, index=current_index, key="sidebar_selection")
-    
-    if choice != st.session_state.page:
-        st.session_state.page = choice
-        st.rerun()
+    # CRITICAL: We bind the radio button directly to the session state key 'selection'
+    st.radio(
+        "SELECT SECTION", 
+        ["Home", "Mark Attendance", "View Reports", "Analytics"], 
+        key="selection"
+    )
 
     st.divider()
     st.caption(f"**Designed by:** Ganesh Basani")
     st.caption("📅 **Year:** 2025")
 
+# Data Setup
 students = load_students()
 if 'attendance_map' not in st.session_state:
     st.session_state.attendance_map = {s["student_id"]: "Absent" for s in students}
 
 # --- 3. HOME PAGE ---
-if st.session_state.page == "Home":
+if st.session_state.selection == "Home":
     st.markdown('<h1 class="animated-title">AttendX</h1>', unsafe_allow_html=True)
     st.markdown("""
         <div class="centered-text">
@@ -89,7 +82,7 @@ if st.session_state.page == "Home":
     
     col_l, col_c, col_r = st.columns([1, 1, 1])
     with col_c:
-        # FIXED: Use on_click to redirect correctly
+        # This button now updates 'selection' via the callback function
         st.button("🚀 Get Started", use_container_width=True, on_click=handle_get_started)
 
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -102,7 +95,7 @@ if st.session_state.page == "Home":
             st.markdown(f'<div class="feature-card"><h3>{title}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
 
 # --- 4. MARK ATTENDANCE ---
-elif st.session_state.page == "Mark Attendance":
+elif st.session_state.selection == "Mark Attendance":
     st.header("📝 Mark Attendance")
     search = st.text_input("🔍 Search Student", placeholder="Search by name...")
     cols = st.columns(3)
@@ -122,22 +115,17 @@ elif st.session_state.page == "Mark Attendance":
         st.success("Records Synced Successfully!")
 
 # --- 5. VIEW REPORTS ---
-elif st.session_state.page == "View Reports":
+elif st.session_state.selection == "View Reports":
     st.header("📋 Attendance Reports")
     tab1, tab2, tab3 = st.tabs(["Daily Report", "Monthly Summary", "Yearly Overview"])
-    report_data = []
-    for s in students:
-        status = st.session_state.attendance_map.get(s["student_id"], "Absent")
-        perc = 100 if status == "Present" else 0
-        grade = "A" if perc >= 90 else "B" if perc >= 80 else "C" if perc >= 70 else "D"
-        report_data.append({"Student Name": s["name"], "ID": s["student_id"], "Status": status, "Attendance %": f"{perc}%", "Grade": grade})
+    report_data = [{"Student Name": s["name"], "ID": s["student_id"], "Status": st.session_state.attendance_map.get(s["student_id"], "Absent")} for s in students]
     df_report = pd.DataFrame(report_data)
     with tab1: st.dataframe(df_report, use_container_width=True)
     with tab2: st.write(df_report)
     with tab3: st.write(df_report)
 
 # --- 6. ANALYTICS ---
-elif st.session_state.page == "Analytics":
+elif st.session_state.selection == "Analytics":
     st.header("📈 System Analytics")
     total = len(students)
     present = list(st.session_state.attendance_map.values()).count("Present")
@@ -145,9 +133,9 @@ elif st.session_state.page == "Analytics":
     m1, m2, m3 = st.columns(3)
     with m1: st.markdown(f'<div class="feature-card"><h3>Total</h3><h1 style="color:#2563EB;">{total}</h1></div>', unsafe_allow_html=True)
     with m2: st.markdown(f'<div class="feature-card"><h3>Present</h3><h1 style="color:#22C55E;">{present}</h1></div>', unsafe_allow_html=True)
-    with m3: st.markdown(f'<div class="feature-card"><h3>Rate</h3><h1 style="color:#F97316;">{rate:.1f}%</h1></div>', unsafe_allow_html=True)
+    with m3: st.markdown(f'<div class="feature-card"><h3>Rate</h3><h1>{rate:.1f}%</h1></div>', unsafe_allow_html=True)
 
-# --- 7. FOOTER SECTION (KEPT EXACT DETAILS) ---
+# --- 7. FOOTER SECTION ---
 st.markdown('<div class="footer-spacer"></div>', unsafe_allow_html=True)
 st.markdown(f"""
     <div class="custom-footer">
