@@ -552,10 +552,6 @@ if "last_sync" not in st.session_state:
     st.session_state.last_sync = None
 
 
-def handle_get_started():
-    st.session_state.selection = "Student Management"
-
-
 def go_to(section):
     st.session_state.selection = section
 
@@ -577,18 +573,26 @@ with st.sidebar:
 
     st.markdown('<div class="nav-label">WORKSPACE</div>', unsafe_allow_html=True)
 
-    st.radio(
+    navigation_options = [
+        "Home",
+        "Student Management",
+        "Mark Attendance",
+        "View Reports",
+        "Analytics",
+    ]
+
+    current_index = navigation_options.index(st.session_state.selection)
+
+    selected_navigation = st.radio(
         "Navigation",
-        [
-            "Home",
-            "Student Management",
-            "Mark Attendance",
-            "View Reports",
-            "Analytics",
-        ],
-        key="selection",
+        navigation_options,
+        index=current_index,
         label_visibility="collapsed",
     )
+
+    if selected_navigation != st.session_state.selection:
+        st.session_state.selection = selected_navigation
+        st.rerun()
 
     st.markdown("---")
 
@@ -662,7 +666,7 @@ if st.session_state.selection == "Home":
     st.write("")
 
     if st.button("🚀  Get Started", type="primary", use_container_width=True):
-        handle_get_started()
+        st.session_state.selection = "Student Management"
         st.rerun()
 
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
