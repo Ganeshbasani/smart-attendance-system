@@ -313,6 +313,4 @@ This project is developed for educational and demonstration purposes.
 
 ## ⭐ If you like this project, don't forget to give it a Star!
 
-**Made with ❤️ using Python & Streamlit**
-
 </div>
