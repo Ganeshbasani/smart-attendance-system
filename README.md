@@ -26,8 +26,18 @@ A next-generation attendance management platform built with <b>Streamlit</b>, co
 
 🔗 **https://smart-attendance-system-a7xmbumokbzp45erk8my2v.streamlit.app/**
 
+# App Showcase
 </div>
 
+<img src="./1.png" alt="AttendX Application Screenshot 1" width="900">
+
+<img src="./2.png" alt="AttendX Application Screenshot 2" width="900">
+
+<img src="./3.png" alt="AttendX Application Screenshot 3" width="900">
+
+<img src="./4.png" alt="AttendX Application Screenshot 4" width="900">
+
+<img src="./5.png" alt="AttendX Application Screenshot 5" width="900">
 ---
 
 # 📖 Overview
@@ -76,18 +86,6 @@ Designed with a modern biometric-inspired interface and cloud-ready architecture
                        ▼
              Analytics & Reports
 ```
-
----
-
-<img src="./1.png" alt="AttendX Application Screenshot 1" width="900">
-
-<img src="./2.png" alt="AttendX Application Screenshot 2" width="900">
-
-<img src="./3.png" alt="AttendX Application Screenshot 3" width="900">
-
-<img src="./4.png" alt="AttendX Application Screenshot 4" width="900">
-
-<img src="./5.png" alt="AttendX Application Screenshot 5" width="900">
 # ⚙️ Technology Stack
 
 | Category | Technologies |
