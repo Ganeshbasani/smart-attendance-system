@@ -79,50 +79,15 @@ Designed with a modern biometric-inspired interface and cloud-ready architecture
 
 ---
 
-# 📸 Application Preview
+<img src="./1.png" alt="AttendX Application Screenshot 1" width="900">
 
-## 🏠 Home Page
+<img src="./2.png" alt="AttendX Application Screenshot 2" width="900">
 
-![Home](screenshots/home.png)
+<img src="./3.png" alt="AttendX Application Screenshot 3" width="900">
 
----
+<img src="./4.png" alt="AttendX Application Screenshot 4" width="900">
 
-## 🔐 Login Page
-
-![Login](screenshots/login.png)
-
----
-
-## 📝 Teacher Registration
-
-![Register](screenshots/register.png)
-
----
-
-## 👨‍🎓 Student Management
-
-![Students](screenshots/student_management.png)
-
----
-
-## ✅ Mark Attendance
-
-![Attendance](screenshots/attendance.png)
-
----
-
-## 📊 Analytics Dashboard
-
-![Dashboard](screenshots/dashboard.png)
-
----
-
-## 📈 Reports
-
-![Reports](screenshots/reports.png)
-
----
-
+<img src="./5.png" alt="AttendX Application Screenshot 5" width="900">
 # ⚙️ Technology Stack
 
 | Category | Technologies |
