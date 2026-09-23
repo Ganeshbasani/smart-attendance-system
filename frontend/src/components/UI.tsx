@@ -1,0 +1,10 @@
+import type {ReactNode} from 'react';import{ArrowUpRight,ChevronRight,Info,ShieldCheck,TriangleAlert,CheckCircle2}from'lucide-react'
+export function PageHeader({eyebrow,title,desc,action}:{eyebrow:string;title:string;desc:string;action?:ReactNode}){return <div className="page-header"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{desc}</p></div>{action&&<div>{action}</div>}</div>}
+export function Stat({label,value,note,trend}:{label:string;value:string|number;note?:string;trend?:'up'|'down'|'flat'}){return <div className="stat-card"><span>{label}</span><strong>{value}</strong><small className={trend==='up'?'trend up':trend==='down'?'trend down':'trend'}>{note||'—'}</small></div>}
+const statusMap:any={Safe:'safe',Watch:'watch','At Risk':'risk',Critical:'critical'}
+export function Status({state}:{state:string}){return <span className={`status ${statusMap[state]||'neutral'}`}>{state}</span>}
+export function TrustBadge({text='Verified'}:{text?:string}){return <span className="trust"><ShieldCheck size={14}/>{text}</span>}
+export function Empty({title,desc,icon=<Info size={22}/>}:{title:string;desc:string;icon?:ReactNode}){return <div className="empty">{icon}<div><b>{title}</b><span>{desc}</span></div></div>}
+export function Insight({kind='info',title,children}:{kind?:'info'|'warning'|'danger'|'success';title:string;children:ReactNode}){const Icon=kind==='warning'||kind==='danger'?TriangleAlert:kind==='success'?CheckCircle2:Info;return <div className={`insight ${kind}`}><Icon size={17}/><div><b>{title}</b><p>{children}</p></div></div>}
+export function ActionLink({children,onClick}:{children:ReactNode;onClick?:()=>void}){return <button onClick={onClick} className="action-link">{children}<ChevronRight size={15}/></button>}
+export function Button({children,variant='primary',onClick,type='button',disabled=false}:{children:ReactNode;variant?:'primary'|'secondary'|'ghost'|'danger';onClick?:()=>void;type?:'button'|'submit';disabled?:boolean}){return <button type={type} disabled={disabled} onClick={onClick} className={`btn ${variant}`}>{children}<ArrowUpRight size={15}/></button>}
