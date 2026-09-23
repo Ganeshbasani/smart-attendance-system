@@ -1,0 +1,7 @@
+streamlit>=1.42,<2
+pandas>=2.2,<4
+plotly>=5.24,<7
+qrcode[pil]>=7.4,<9
+pytest>=8.3,<9
+bandit>=1.7,<2
+pip-audit>=2.7,<3

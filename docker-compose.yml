@@ -1,0 +1,12 @@
+services:
+  attendx:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - attendx_data:/app/data
+    environment:
+      ATTENDX_SECRET_KEY: ${ATTENDX_SECRET_KEY:-change-this-in-production}
+
+volumes:
+  attendx_data:
