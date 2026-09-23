@@ -1,9 +1,35 @@
-import {useEffect,useMemo,useState} from 'react';import{CalendarDays,CheckCircle2,ChevronRight,Clock3,LockKeyhole,ScanLine,ShieldCheck,Target,TrendingDown,TrendingUp,UploadCloud}from'lucide-react';import{api,uploadDocument}from'../lib/api';import{queueEvent,queued,clearEvent}from'../lib/offline';import{Insight,PageHeader,Stat,Status,TrustBadge,Button,Empty}from'../components/UI';import type{User}from'../App';
+import {useEffect,useMemo,useState,useRef} from 'react';
+import {Html5Qrcode} from 'html5-qrcode';import{CalendarDays,CheckCircle2,ChevronRight,Clock3,LockKeyhole,ScanLine,ShieldCheck,Target,TrendingDown,TrendingUp,UploadCloud}from'lucide-react';import{api,uploadDocument}from'../lib/api';import{queueEvent,queued,clearEvent}from'../lib/offline';import{Insight,PageHeader,Stat,Status,TrustBadge,Button,Empty}from'../components/UI';import type{User}from'../App';
 
 type Subject={subject_id:number;code:string;name:string;state:string;reason:string;current_percent:number;threshold:number;remaining:number;safe_miss:number;required_to_recover:number;next_window:number;required_in_next_window:number;recoverable:boolean;projected_end_percent:number}
 export default function Student({user}:{user:User}){const[dash,setDash]=useState<any>();const[history,setHistory]=useState<any[]>([]);const[corrections,setCorrections]=useState<any[]>([]);const[condonations,setCondonations]=useState<any[]>([]);const[requestMsg,setRequestMsg]=useState('');const[correctionForm,setCorrectionForm]=useState({session_id:'',requested_status:'Present',reason:''});const[condonationForm,setCondonationForm]=useState({subject_id:'',reason:''});const[correctionFile,setCorrectionFile]=useState<File>();const[condonationFile,setCondonationFile]=useState<File>();const[scanOpen,setScanOpen]=useState(false);const[scannerReady,setScannerReady]=useState(false);const[scanPayload,setScanPayload]=useState('');const scannerRef=useRef<Html5Qrcode|null>(null);const[scanMsg,setScanMsg]=useState('');const[offlineCount,setOfflineCount]=useState(0);const[refresh,setRefresh]=useState(0);
  useEffect(()=>{api<any>('/student/dashboard').then(setDash);api<any[]>('/student/history').then(setHistory);api<any[]>('/requests/corrections').then(setCorrections);api<any[]>('/requests/condonation').then(setCondonations);queued().then(q=>setOfflineCount(q.length))},[refresh]);
- useEffect(()=>{if(!scanOpen)return;const scanner=new Html5Qrcode('attendx-qr-reader');scannerRef.current=scanner;scanner.start({facingMode:{exact:'environment'}},{fps:10,qrbox:{width:220,height:220}},txt=>{setScanPayload(txt);setScannerReady(true);scanner.stop().catch(()=>{});},()=>{}).catch(()=>{setScannerReady(true)});return()=>{scanner.stop().catch(()=>{});scanner.clear().catch(()=>{})}},[scanOpen]);
+ useEffect(() => {
+  if (!scanOpen) return;
+
+  const scanner = new Html5Qrcode('attendx-qr-reader');
+  scannerRef.current = scanner;
+
+  const startResult = scanner.start(
+    { facingMode: { exact: 'environment' } },
+    { fps: 10, qrbox: { width: 220, height: 220 } },
+    (txt: string) => {
+      setScanPayload(txt);
+      setScannerReady(true);
+      Promise.resolve(scanner.stop()).catch(() => {});
+    },
+    () => {}
+  );
+
+  Promise.resolve(startResult).catch(() => {
+    setScannerReady(true);
+  });
+
+  return () => {
+    Promise.resolve(scanner.stop()).catch(() => {});
+    Promise.resolve(scanner.clear()).catch(() => {});
+  };
+}, [scanOpen]);
  const focus=useMemo(()=>dash?.subjects?.slice().sort((a:Subject,b:Subject)=>a.current_percent-b.current_percent)[0],[dash]);
  const sync=async()=>{const q=await queued();if(!q.length||!navigator.onLine)return;try{const r=await api<any>('/sync/events',{method:'POST',body:JSON.stringify(q.map((e:any)=>({client_event_id:e.client_event_id,payload:e.payload})))})}catch{return}for(const e of q)await clearEvent(e.client_event_id);setOfflineCount(0)};
  useEffect(()=>{window.addEventListener('online',sync);return()=>window.removeEventListener('online',sync)},[])
@@ -19,3 +45,6 @@ export default function Student({user}:{user:User}){const[dash,setDash]=useState
  <section className="two-col" id="requests"><div className="panel"><div className="section-head"><div><h2>Correction request</h2><p>Request a traceable change when a session was marked incorrectly.</p></div></div><div className="form-grid"><label>Session ID<input value={correctionForm.session_id} onChange={e=>setCorrectionForm({...correctionForm,session_id:e.target.value})} placeholder="e.g. 33"/></label><label>Requested status<select value={correctionForm.requested_status} onChange={e=>setCorrectionForm({...correctionForm,requested_status:e.target.value})}><option>Present</option><option>Absent</option><option>Excused</option></select></label><label>Supporting file<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>setCorrectionFile(e.target.files?.[0])}/></label><label className="span-2">Reason<textarea value={correctionForm.reason} onChange={e=>setCorrectionForm({...correctionForm,reason:e.target.value})} placeholder="Explain what should be corrected and why…"/></label></div><Button onClick={async()=>{try{await api('/requests/corrections',{method:'POST',body:JSON.stringify({session_id:Number(correctionForm.session_id),requested_status:correctionForm.requested_status,reason:correctionForm.reason,document_name:correctionFile?.name})});setRequestMsg('Correction submitted for review');setCorrectionForm({...correctionForm,reason:''});api<any[]>('/requests/corrections').then(setCorrections)}catch(e){setRequestMsg(e instanceof Error?e.message:'Could not submit')}}}>Submit correction</Button>{requestMsg&&<Insight kind="info" title="Request status">{requestMsg}</Insight>}<div className="request-list">{corrections.slice(0,4).map(r=><div key={r.id}><div><b>Session #{r.session_id}</b><span>{r.requested_status} · {r.reason}</span></div><Status state={r.status==='Approved'?'Safe':r.status==='Rejected'?'Critical':'Watch'}/></div>)}</div></div><div className="panel" id="condonation"><div className="section-head"><div><h2>Condonation</h2><p>Submit an exception request with a clear academic reason.</p></div></div><div className="form-grid"><label>Subject<select value={condonationForm.subject_id} onChange={e=>setCondonationForm({...condonationForm,subject_id:e.target.value})}><option value="">Select subject</option>{dash.subjects.map((s:Subject)=><option key={s.subject_id} value={s.subject_id}>{s.code} · {s.name}</option>)}</select></label><label>Supporting file<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>setCorrectionFile(e.target.files?.[0])}/></label><label>Supporting file<input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e=>setCondonationFile(e.target.files?.[0])}/></label><label className="span-2">Reason<textarea value={condonationForm.reason} onChange={e=>setCondonationForm({...condonationForm,reason:e.target.value})} placeholder="Describe the exceptional circumstance…"/></label></div><Button onClick={async()=>{try{await api('/requests/condonation',{method:'POST',body:JSON.stringify({subject_id:Number(condonationForm.subject_id),reason:condonationForm.reason,document_name:condonationFile?.name})});setRequestMsg('Condonation request submitted');setCondonationForm({...condonationForm,reason:''});api<any[]>('/requests/condonation').then(setCondonations)}catch(e){setRequestMsg(e instanceof Error?e.message:'Could not submit')}}}>Submit condonation</Button><div className="request-list">{condonations.slice(0,4).map(r=><div key={r.id}><div><b>Subject #{r.subject_id}</b><span>{r.reason}</span></div><Status state={r.status==='Approved'?'Safe':r.status==='Rejected'?'Critical':'Watch'}/></div>)}</div></div></section>
  <section className="panel" id="history"><div className="section-head"><div><h2>Recent history</h2><p>Verified attendance events from the last recorded sessions.</p></div></div><div className="table-wrap"><table><thead><tr><th>Date</th><th>Subject</th><th>Status</th><th>Source</th></tr></thead><tbody>{history.slice(0,10).map((r:any,i)=><tr key={i}><td>{new Date(r.date).toLocaleDateString()}</td><td><b>{r.code}</b><span className="cell-sub">{r.subject}</span></td><td><span className={`mini-status ${r.status.toLowerCase()}`}>{r.status}</span></td><td>{r.source}</td></tr>)}</tbody></table></div></section>
  </div>}
+
+
+

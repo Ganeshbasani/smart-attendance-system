@@ -1,19 +1,31 @@
 {
-  "name": "attendx-web",
-  "private": true,
-  "version": "2.0.0",
-  "type": "module",
-  "scripts": {"dev":"vite","build":"tsc -b && vite build","preview":"vite preview"},
-  "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "html5-qrcode": "^2.3.8",
-    "idb": "^8.0.0",
-    "lucide-react": "^0.544.0",
-    "qrcode.react": "^4.2.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.1",
-    "recharts": "^3.2.1"
-  },
-  "devDependencies": {"typescript":"^5.8.3","vite":"^7.1.5","@types/react":"^19.1.13","@types/react-dom":"^19.1.9"}
+    "name":  "attendx-web",
+    "private":  true,
+    "version":  "2.0.1",
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "vite",
+                    "build":  "tsc -b \u0026\u0026 vite build",
+                    "preview":  "vite preview"
+                },
+    "dependencies":  {
+                         "html5-qrcode":  "^2.3.8",
+                         "idb":  "^8.0.0",
+                         "lucide-react":  "^0.544.0",
+                         "qrcode.react":  "^4.2.0",
+                         "react":  "^19.1.1",
+                         "react-dom":  "^19.1.1",
+                         "react-router-dom":  "^7.9.1",
+                         "recharts":  "^3.2.1"
+                     },
+    "devDependencies":  {
+                            "typescript":  "^5.8.3",
+                            "vite":  "^8.1.0",
+                            "@types/react":  "^19.1.13",
+                            "@types/react-dom":  "^19.1.9",
+                            "@vitejs/plugin-react":  "6.1.1"
+                        },
+    "engines":  {
+                    "node":  "\u003e=22.12.0"
+                }
 }
