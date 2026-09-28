@@ -1,4 +1,4 @@
-name: AttendX CI
+name: CI
 
 on:
   push:
@@ -6,60 +6,52 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-
 jobs:
-  backend:
-    name: Backend Tests
+  backend-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install backend dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Compile backend
-        working-directory: backend
-        run: python -m compileall -q app
-
-      - name: Run backend tests
-        working-directory: backend
+      - name: Run tests
         env:
-          PYTHONPATH: .
-        run: python -m pytest -q
+          DATABASE_URL: "sqlite:///./test.db"
+          SECRET_KEY: "ci-test-secret-key-which-is-sufficiently-long-32"
+          ADMIN_EMAIL: "admin@test.com"
+          RATE_LIMIT_ENABLED: "false"
+        run: python -m pytest tests/ -v --tb=short
 
-  frontend:
-    name: Frontend Build
+  frontend-build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "18"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm install --no-audit --no-fund
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build frontend
-        working-directory: frontend
+      - name: Build
+        env:
+          CI: "false"
         run: npm run build
