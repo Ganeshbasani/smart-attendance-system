@@ -3,7 +3,7 @@
 # 🚀 Smart Attendance System
 
 <img src="https://readme-typing-svg.demolab.com?font=Inter&weight=700&size=30&duration=2800&pause=900&color=2563EB&center=true&vCenter=true&width=820&lines=Real-Time+Face+Recognition;Active+Liveness+Detection;Role-Based+Attendance+Management;React+%2B+FastAPI+%2B+PostgreSQL;Deployed+on+Vercel+%2B+Render+%2B+Neon" alt="Animated Smart Attendance System title" />
-
+    
 <p>
   <strong>A full-stack attendance platform combining face recognition, active liveness verification, JWT authentication, admin controls, and analytics.</strong>
 </p>
