@@ -1,214 +1,572 @@
-# Smart Attendance System
+<div align="center">
 
-![CI Status](https://github.com/sharmaasahill/Smart_Attendance_System/actions/workflows/ci.yml/badge.svg)
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
+# 🚀 Smart Attendance System
 
-A production-grade attendance platform that marks attendance through **real-time
-face recognition** with **active liveness detection**, backed by role-based
-access control, admin management, and analytics.
+<img src="https://readme-typing-svg.demolab.com?font=Inter&weight=700&size=30&duration=2800&pause=900&color=2563EB&center=true&vCenter=true&width=820&lines=Real-Time+Face+Recognition;Active+Liveness+Detection;Role-Based+Attendance+Management;React+%2B+FastAPI+%2B+PostgreSQL;Deployed+on+Vercel+%2B+Render+%2B+Neon" alt="Animated Smart Attendance System title" />
 
-Recognition is powered by **InsightFace (ArcFace, 512-d ONNX embeddings)** on the
-server and **MediaPipe FaceLandmarker** in the browser for genuine face detection
-and a blink-based anti-spoofing challenge. Face embeddings and enrollment images
-live in the database, so the backend is **stateless** and survives restarts and
-redeploys.
+<p>
+  <strong>A full-stack attendance platform combining face recognition, active liveness verification, JWT authentication, admin controls, and analytics.</strong>
+</p>
 
-## Live demo
+<p>
+  <a href="https://smart-attendance-system-ecru-one.vercel.app">
+    <img src="https://img.shields.io/badge/🌐%20Live%20Demo-Open%20App-2563EB?style=for-the-badge" alt="Live Demo" />
+  </a>
+  <a href="https://smart-attendance-system-2-oaz3.onrender.com/docs">
+    <img src="https://img.shields.io/badge/📚%20API%20Docs-Swagger-009688?style=for-the-badge" alt="API Docs" />
+  </a>
+  <a href="https://github.com/Ganeshbasani/smart-attendance-system">
+    <img src="https://img.shields.io/badge/💻%20Source-GitHub-111827?style=for-the-badge&logo=github" alt="GitHub Repository" />
+  </a>
+</p>
 
-| Surface | URL |
-|---------|-----|
-| Web app | https://smart-attendance-system-kappa-brown.vercel.app |
-| API docs (Swagger) | https://sharmaasahill-smart-attendance-api.hf.space/docs |
+<p>
+  <img src="https://github.com/Ganeshbasani/smart-attendance-system/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React 18" />
+  <img src="https://img.shields.io/badge/FastAPI-0.104%2B-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/License-MIT-22C55E" alt="MIT License" />
+</p>
 
-> First request after a period of inactivity may take ~20–30s while the free
-> backend instance wakes and loads the recognition model.
+</div>
 
 ---
 
-## Features
+## 🌐 Live System
 
-- **Automatic face attendance** — marks the moment a real, centered face passes a live blink check, no button press.
-- **Advanced recognition** — ArcFace embeddings, all-images-per-user enrollment, cosine k-NN matching with a tuned threshold and real confidence scores.
-- **Multi-frame voting** — several frames are matched independently and must agree, reducing false accepts/rejects.
-- **Active liveness / anti-spoofing** — in-browser blink challenge (MediaPipe blendshapes), enforced server-side on the attendance path.
-- **Identity-locked marking** — when a user is logged in, only their own face is accepted; another person's face is rejected. Anonymous (kiosk) mode can recognize any enrolled user.
-- **Quality-gated enrollment** — detection score, face size, sharpness, and brightness checks.
-- **Duplicate-face prevention** — a face can only be enrolled to one account.
-- **Role-based access** — admin vs. user, JWT-authenticated.
-- **Admin tools** — user/attendance management, face management, registered-face gallery, paginated lists.
-- **Analytics** — trends, punctuality, anomalies, automated reports, CSV export (computed only from real records).
-- **Timezone-correct** — attendance dates/times recorded in a configurable organization timezone.
-- **Hardened** — strong-secret enforcement, rate limiting, security headers, password policy.
+| Layer | Live URL |
+|---|---|
+| 🚀 **Web Application** | **https://smart-attendance-system-ecru-one.vercel.app** |
+| ⚡ **Backend API** | **https://smart-attendance-system-2-oaz3.onrender.com** |
+| 📖 **Swagger / OpenAPI** | **https://smart-attendance-system-2-oaz3.onrender.com/docs** |
+| 💻 **GitHub Repository** | **https://github.com/Ganeshbasani/smart-attendance-system** |
 
-## Architecture
+> **Note:** the backend is hosted on a free-tier service, so an inactive instance can require a short warm-up period before responding.
 
-```
-Browser (React + MediaPipe)         Vercel (static hosting / CDN)
-        │  HTTPS / JWT
-        ▼
-FastAPI + InsightFace (ArcFace)      Hugging Face Spaces (Docker)
-        │  SQLAlchemy
-        ▼
-PostgreSQL  (users, attendance, face_embeddings, face_images)   Neon
-```
+---
 
-The frontend is a static bundle served by Vercel; it calls the FastAPI backend,
-which runs the recognition model and reads/writes all data — including face
-embeddings and images — in PostgreSQL.
+## 🖼️ Product Preview
 
-## Tech stack
+The repository includes the five supplied application screenshots under `assets/screenshots/`.
 
-| Layer    | Technology |
-|----------|------------|
-| Frontend | React, Material UI, Framer Motion, MediaPipe Tasks Vision |
-| Backend  | FastAPI, SQLAlchemy 2, Pydantic Settings, SlowAPI (rate limiting) |
-| ML       | InsightFace (SCRFD + ArcFace), onnxruntime, OpenCV |
-| Database | PostgreSQL (production) / SQLite (local) |
-| Auth     | JWT (python-jose), bcrypt |
-| Ops      | Docker, Alembic, GitHub Actions CI |
-| Hosting  | Vercel (frontend), Hugging Face Spaces (backend), Neon (database) |
+|  |  |
+|---|---|
+| <img src="assets/screenshots/01.png" alt="Application screenshot 01" width="100%"> | <img src="assets/screenshots/02.png" alt="Application screenshot 02" width="100%"> |
+| <img src="assets/screenshots/03.png" alt="Application screenshot 03" width="100%"> | <img src="assets/screenshots/04.png" alt="Application screenshot 04" width="100%"> |
+| <img src="assets/screenshots/05.png" alt="Application screenshot 05" width="100%"> | |
 
-## Project structure
+---
 
-```
-backend/
-  app/
-    main.py                 # app factory, lifespan (migrations + security checks)
-    core/                   # config, security, logging, rate limiter, time utils
-    db/                     # engine/session, declarative base
-    models/                 # User, Attendance, FaceEmbedding, FaceImage
-    schemas/                # Pydantic schemas
-    services/               # face_recognition (DB-backed), analytics
-    api/
-      deps.py               # auth dependencies (required + optional)
-      routers/              # auth, face, attendance, users, admin, analytics
-  alembic/                  # database migrations
-  scripts/                  # one-time data/maintenance scripts
-  Dockerfile, requirements.txt
-frontend/
-  src/components/           # React components (MarkAttendance, AdminDashboard, ...)
-  src/services/api.js       # API client (env-driven base URL)
-  public/models/, public/mediapipe/   # vendored MediaPipe model + WASM
-  vercel.json, Dockerfile
-.github/workflows/ci.yml    # backend tests + frontend build on every push
+## ✨ Why this project is interesting
+
+This is more than a basic CRUD attendance application. The workflow combines browser-side computer vision, backend biometric matching, authentication, persistence, analytics, and cloud deployment into one end-to-end system.
+
+### Core workflow
+
+```text
+Camera
+  ↓
+Face Detection
+  ↓
+Active Blink / Liveness Challenge
+  ↓
+Frame Quality Checks
+  ↓
+InsightFace / ArcFace Matching
+  ↓
+Identity Verification
+  ↓
+Attendance Record
+  ↓
+Analytics & Admin Reporting
 ```
 
 ---
 
-## Quick start (Docker)
+## 🧠 Key Features
+
+### 👤 Face Recognition
+- InsightFace-based recognition
+- ArcFace embeddings
+- Multi-image enrollment
+- Cosine similarity matching
+- Multi-frame agreement before marking
+- Identity-locked verification for authenticated users
+
+### 👁️ Active Liveness Detection
+- Browser-side MediaPipe FaceLandmarker
+- Blink-based challenge
+- Liveness state participates in the attendance flow
+- Designed to reduce simple photo-based attempts
+
+### 🛡️ Authentication & Security
+- JWT authentication
+- User and admin roles
+- Password hashing
+- Production secret validation
+- Rate limiting
+- Security headers
+- Configurable CORS
+
+### 📊 Attendance & Analytics
+- Automatic attendance marking
+- Attendance history
+- Trend analysis
+- Punctuality information
+- Anomaly-oriented analytics
+- Reports and CSV export
+
+### 🧑‍💼 Admin Management
+- User management
+- Attendance management
+- Face management
+- Registered-face gallery
+- Paginated administrative views
+
+### 🗄️ Data Persistence
+- PostgreSQL in deployment
+- SQLite option for local development
+- SQLAlchemy ORM
+- Alembic migrations
+- Face embeddings and enrollment images persisted in the database
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TD
+    A["🌐 Browser<br/>React UI"] --> B["🎥 MediaPipe FaceLandmarker<br/>Face Detection + Blink Challenge"]
+    B -->|HTTPS + JWT| C["⚡ FastAPI Backend"]
+    C --> D["🧠 InsightFace / ArcFace"]
+    C --> E["🗄️ PostgreSQL"]
+    C --> F["📊 Attendance + Analytics"]
+
+    V["Vercel"] --- A
+    R["Render"] --- C
+    N["Neon PostgreSQL"] --- E
+```
+
+### Deployment topology
+
+```text
+                    ┌───────────────────────┐
+                    │       Vercel          │
+                    │   React Frontend      │
+                    └───────────┬───────────┘
+                                │
+                         HTTPS / JWT
+                                │
+                                ▼
+                    ┌───────────────────────┐
+                    │       Render          │
+                    │   FastAPI + ML API    │
+                    │ InsightFace / ArcFace │
+                    └───────────┬───────────┘
+                                │
+                                │ SQL
+                                ▼
+                    ┌───────────────────────┐
+                    │        Neon           │
+                    │     PostgreSQL        │
+                    └───────────────────────┘
+```
+
+---
+
+## 🧰 Technology Stack
+
+| Area | Technologies |
+|---|---|
+| **Frontend** | React, Material UI, Framer Motion |
+| **Computer Vision** | MediaPipe Tasks Vision, OpenCV |
+| **Recognition** | InsightFace, ArcFace, SCRFD, ONNX Runtime |
+| **Backend** | FastAPI, SQLAlchemy 2, Pydantic Settings, SlowAPI |
+| **Authentication** | JWT, python-jose, bcrypt |
+| **Database** | PostgreSQL, SQLite |
+| **Migrations** | Alembic |
+| **DevOps** | Docker, Docker Compose, GitHub Actions |
+| **Deployment** | Vercel, Render, Neon |
+
+---
+
+## 📁 Repository Structure
+
+```text
+smart-attendance-system/
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── deps.py
+│   │   │   └── routers/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   └── services/
+│   ├── alembic/
+│   ├── scripts/
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   └── services/
+│   ├── Dockerfile
+│   └── vercel.json
+│
+├── assets/
+│   └── screenshots/
+│       ├── 01.png
+│       ├── 02.png
+│       ├── 03.png
+│       ├── 04.png
+│       └── 05.png
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
+├── docker-compose.yml
+├── LICENSE
+└── README.md
+```
+
+---
+
+## 🚀 Run It Locally
+
+### Option 1 — Docker Compose
+
+```bash
+git clone https://github.com/Ganeshbasani/smart-attendance-system.git
+cd smart-attendance-system
+```
+
+Create a root `.env`:
+
+```env
+SECRET_KEY=replace-with-a-strong-random-secret
+```
+
+Start the full stack:
 
 ```bash
 docker compose up --build
 ```
 
-- Frontend: <http://localhost:3000>
-- API docs: <http://localhost:8000/docs>
+Open:
 
-Set `SECRET_KEY` and `ADMIN_EMAIL` via environment or a root `.env`.
+```text
+Frontend   → http://localhost:3000
+API        → http://localhost:8000
+Swagger    → http://localhost:8000/docs
+```
 
-## Local development
+---
+
+## 💻 Development Setup
 
 ### Backend
 
 ```bash
 cd backend
-python -m venv .venv && .venv\Scripts\activate      # Windows
-# source .venv/bin/activate                          # macOS/Linux
-pip install -r requirements.txt
-cp .env.example .env          # edit values; set DEBUG=true for local
 
-python -m uvicorn app.main:app --reload --port 8000
+python -m venv .venv
 ```
 
-The InsightFace model pack (`buffalo_l`) downloads automatically on first use.
-Locally the app defaults to a SQLite database (zero setup).
+Windows:
+
+```powershell
+.venv\Scripts\activate
+```
+
+macOS / Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start API:
+
+```bash
+python -m uvicorn app.main:app --reload --port 8000
+```
 
 ### Frontend
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env          # REACT_APP_API_URL=http://localhost:8000
+```
+
+Create `frontend/.env`:
+
+```env
+REACT_APP_API_URL=http://localhost:8000
+```
+
+Start:
+
+```bash
 npm start
 ```
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
-Backend settings are environment-driven (`backend/.env`, see `.env.example`):
+The backend uses environment-driven configuration.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | local SQLite | e.g. `postgresql+psycopg2://user:pass@host:5432/db?sslmode=require` |
-| `SECRET_KEY` | dev value | JWT signing key — must be strong (>=32 chars) when `DEBUG=false` |
-| `ADMIN_EMAIL` | — | email auto-assigned the admin role at registration |
-| `BACKEND_CORS_ORIGINS` | `http://localhost:3000` | comma-separated allowed origins |
-| `APP_TIMEZONE` | `Asia/Kolkata` | IANA timezone used for attendance dates/times |
-| `DEBUG` | `false` | `true` relaxes the strong-secret check for local dev |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | JWT lifetime |
-| `RATE_LIMIT_LOGIN` / `RATE_LIMIT_ATTENDANCE` | `5/minute` / `20/minute` | request throttles |
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Database connection string |
+| `SECRET_KEY` | JWT signing key |
+| `ADMIN_EMAIL` | Email that receives the admin role during registration |
+| `BACKEND_CORS_ORIGINS` | Allowed frontend origins |
+| `APP_TIMEZONE` | Organization timezone |
+| `DEBUG` | Local debug mode |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT lifetime |
+| `RATE_LIMIT_LOGIN` | Login request throttling |
+| `RATE_LIMIT_ATTENDANCE` | Attendance request throttling |
+| `REACT_APP_API_URL` | Frontend build-time backend URL |
 
-The frontend uses `REACT_APP_API_URL` (baked at build time) to locate the backend.
+### Production frontend configuration
 
-## Database & migrations
-
-Schema is managed by Alembic and applied automatically at startup. To work with
-it manually:
-
-```bash
-cd backend
-alembic upgrade head                              # apply migrations
-alembic revision --autogenerate -m "message"      # create after model changes
+```env
+REACT_APP_API_URL=https://smart-attendance-system-2-oaz3.onrender.com
 ```
 
-A one-time script migrates legacy on-disk face data into the database:
+### Production backend configuration
 
-```bash
-python -m scripts.migrate_faces_to_db
+```text
+DATABASE_URL=<PostgreSQL connection>
+SECRET_KEY=<strong random secret>
+ADMIN_EMAIL=<admin registration email>
+BACKEND_CORS_ORIGINS=<Vercel application URL>
+DEBUG=false
 ```
 
-## Testing & CI
-
-```bash
-cd backend && pytest          # backend tests
-cd frontend && npm test       # frontend tests
-```
-
-GitHub Actions runs the backend test suite and a production frontend build on
-every push (`.github/workflows/ci.yml`).
+> Never commit production passwords, database credentials, tokens, or `.env` files.
 
 ---
 
-## Deployment (free stack)
+## 🗄️ Database & Migrations
 
-The project is deployed entirely on free tiers:
+The schema is managed with Alembic.
 
-- **Database — Neon:** managed, always-on PostgreSQL. Persistent storage that a
-  containerized backend can share across restarts.
-- **Backend — Hugging Face Spaces (Docker):** 2 vCPU / 16 GB RAM free tier,
-  enough headroom for the InsightFace model. The image pre-downloads the model
-  so the first request is fast.
-- **Frontend — Vercel:** global CDN for the static React bundle, auto-deploying
-  on every push, with free HTTPS.
+Apply migrations:
 
-Backend environment (set as Space secrets): `DATABASE_URL`, `SECRET_KEY`,
-`ADMIN_EMAIL`, `BACKEND_CORS_ORIGINS` (the Vercel URL), `DEBUG=false`.
+```bash
+cd backend
+alembic upgrade head
+```
 
-## Security notes
+Create a migration after model changes:
 
-- Biometric data (face embeddings and images) is stored in the database; local
-  artifacts and `.env` files are git-ignored.
-- A strong `SECRET_KEY` is enforced at startup in production, and
-  `BACKEND_CORS_ORIGINS` should be restricted to your frontend origin.
-- Rate limiting, security headers, and a password policy are enabled.
-- Liveness is verified client-side; for hardened deployments consider adding a
-  server-side passive anti-spoofing model.
+```bash
+alembic revision --autogenerate -m "describe the change"
+```
 
-## License
+---
 
-[MIT](LICENSE)
+## 🧪 Testing
+
+### Backend
+
+```bash
+cd backend
+pytest
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm test -- --watchAll=false --runInBand
+```
+
+### Production build
+
+```bash
+cd frontend
+npm run build
+```
+
+The repository includes GitHub Actions CI for backend tests and the frontend build.
+
+---
+
+## 🔐 Security & Privacy
+
+Because the platform processes biometric information, deployment should be treated as a security-sensitive application.
+
+Implemented application protections include:
+
+- JWT-based authentication
+- Password hashing
+- Role-based authorization
+- Strong production secret enforcement
+- Rate limiting
+- Security headers
+- Configurable CORS
+- Database-backed biometric records
+- `.env` exclusion through Git configuration
+
+For a higher-assurance biometric deployment, additional controls such as server-side passive anti-spoofing, stronger infrastructure isolation, audit logging, retention rules, and explicit privacy/consent policies should be considered.
+
+---
+
+## 🌍 Deployment
+
+### Frontend — Vercel
+
+```text
+https://smart-attendance-system-ecru-one.vercel.app
+```
+
+### Backend — Render
+
+```text
+https://smart-attendance-system-2-oaz3.onrender.com
+```
+
+### Database — Neon
+
+The deployed backend uses PostgreSQL hosted on Neon.
+
+### API Documentation
+
+```text
+https://smart-attendance-system-2-oaz3.onrender.com/docs
+```
+
+---
+
+## 🔄 End-to-End Flow
+
+```text
+┌──────────────┐
+│    User      │
+└──────┬───────┘
+       │
+       ▼
+┌────────────────────┐
+│ React Application  │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ Face Detection     │
+│ + Blink Challenge  │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ FastAPI Attendance │
+│ Verification API   │
+└─────────┬──────────┘
+          │
+          ├──────────────► InsightFace / ArcFace
+          │
+          ▼
+┌────────────────────┐
+│ Identity + Frame   │
+│ Agreement Checks   │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ PostgreSQL Record  │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ Attendance /       │
+│ Analytics Views    │
+└────────────────────┘
+```
+
+---
+
+## 📌 Engineering Highlights
+
+### Computer Vision
+The application combines browser-side face detection and liveness checks with backend recognition.
+
+### Backend Engineering
+The FastAPI layer separates authentication, attendance, face handling, administration, and analytics into API routers and services.
+
+### Database Engineering
+SQLAlchemy models and Alembic migrations provide structured persistence for users, attendance records, face embeddings, and face images.
+
+### DevOps
+The project includes Docker configuration, CI workflow automation, and a cloud deployment split across Vercel, Render, and Neon.
+
+---
+
+## 📊 What This Demonstrates
+
+```text
+✅ Full-Stack Development
+✅ REST API Design
+✅ Computer Vision Integration
+✅ ML Inference Integration
+✅ Authentication & Authorization
+✅ PostgreSQL Data Modeling
+✅ Database Migrations
+✅ Docker
+✅ CI/CD
+✅ Cloud Deployment
+✅ Production Configuration
+✅ Analytics
+```
+
+---
+
+## 🔗 Quick Links
+
+<p align="center">
+
+<a href="https://smart-attendance-system-ecru-one.vercel.app">
+  <img src="https://img.shields.io/badge/🚀%20Launch%20Application-2563EB?style=for-the-badge" alt="Launch Application" />
+</a>
+
+<a href="https://smart-attendance-system-2-oaz3.onrender.com/docs">
+  <img src="https://img.shields.io/badge/📖%20Open%20Swagger%20Docs-009688?style=for-the-badge" alt="Swagger Docs" />
+</a>
+
+<a href="https://github.com/Ganeshbasani/smart-attendance-system">
+  <img src="https://img.shields.io/badge/⭐%20GitHub-111827?style=for-the-badge&logo=github" alt="GitHub" />
+</a>
+
+</p>
+
+---
+
+## 📜 License
+
+This project is released under the **MIT License**. See [`LICENSE`](LICENSE) for details.
+
+---
+
+<div align="center">
+
+### 🚀 Smart Attendance System
+
+**Face Recognition • Liveness • Attendance • Analytics • Cloud Deployment**
+
+Built with **React + FastAPI + InsightFace + PostgreSQL + Docker**
+
+</div>
