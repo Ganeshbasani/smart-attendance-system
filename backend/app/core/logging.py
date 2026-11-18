@@ -32,10 +32,15 @@ def configure_logging() -> None:
     # Keep our own logs at the chosen level but silence noisy libraries.
     for name in _NOISY_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)
-    # The filter must be present even if a previous basicConfig call (e.g. by a
-    # test runner) already installed a root handler.
-    if not any(isinstance(f, RequestContextFilter) for f in logging.getLogger().filters):
-        logging.getLogger().addFilter(RequestContextFilter())
+    # The filter must live on the HANDLERS, not the root logger: a logger's
+    # filters only run for records emitted directly by that logger, while
+    # propagated records (httpx, sqlalchemy, ...) go straight to the handlers.
+    # A handler-side filter guarantees %(request_id)s exists for every record
+    # that reaches our format string.
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if not any(isinstance(f, RequestContextFilter) for f in handler.filters):
+            handler.addFilter(RequestContextFilter())
 
 
 def get_logger(name: str) -> logging.Logger:

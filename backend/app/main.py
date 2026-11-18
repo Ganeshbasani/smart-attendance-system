@@ -19,12 +19,14 @@ from app.core.request_context import RequestContext, reset_request_context, set_
 from app.db.session import run_migrations, SessionLocal
 from app.api.routers import (
     admin,
+    admin_scheduling,
     analytics,
     attendance,
     auth,
     face,
     liveness,
     users,
+    user_scheduling,
 )
 
 configure_logging()
@@ -161,7 +163,9 @@ def create_app() -> FastAPI:
         liveness.router,
         attendance.router,
         users.router,
+        user_scheduling.router,
         admin.router,
+        admin_scheduling.router,
         analytics.router,
     ):
         app.include_router(router)

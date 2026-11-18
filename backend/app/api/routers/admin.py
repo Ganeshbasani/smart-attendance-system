@@ -18,6 +18,7 @@ from app.models import Attendance, AuditLog, User
 from app.schemas import AttendanceResponse, UserResponse
 from app.services.audit import record as audit_record
 from app.services.face_recognition import FaceEnrollmentError, face_service
+from app.services.scheduling import is_late as scheduling_is_late
 
 logger = logging.getLogger("smart_attendance.admin")
 
@@ -102,7 +103,10 @@ async def get_attendance_records(
             "user": UserResponse.model_validate(record.user),
             "date": record.date.isoformat(),
             "time_in": record.time_in.isoformat() if record.time_in else None,
+            "time_out": record.time_out.isoformat() if record.time_out else None,
             "status": record.status,
+            "is_late": record.is_late,
+            "is_early_leave": record.is_early_leave,
             "created_at": record.created_at.isoformat(),
         })
     response.headers["X-Total-Count"] = str(total)
@@ -114,25 +118,54 @@ async def mark_absent_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
+    """
+    Create absent rows for every active user who has not checked in today.
+
+    Skipped entirely on holidays. Users with an approved leave request
+    covering today get no row either — they are not absent, they are on leave.
+    """
+    from app.models import Holiday
+    from app.services.scheduling import has_approved_leave
+
     today = today_local()
+
+    holiday = db.query(Holiday).filter(Holiday.date == today).first()
+    if holiday:
+        return {
+            "message": f"Skipped: today ({today}) is a holiday — {holiday.name}.",
+            "absent_count": 0,
+            "skipped_holiday": True,
+        }
+
     all_users = db.query(User).filter(User.is_active == True).all()  # noqa: E712
     attended_user_ids = db.query(Attendance.user_id).filter(Attendance.date == today).all()
-    attended_user_ids = [uid[0] for uid in attended_user_ids]
+    attended_user_ids = {uid[0] for uid in attended_user_ids}
 
     absent_count = 0
+    skipped_leave = 0
     for user in all_users:
-        if user.id not in attended_user_ids:
-            db.add(Attendance(user_id=user.id, date=today, status="absent"))
-            absent_count += 1
+        if user.id in attended_user_ids:
+            continue
+        if has_approved_leave(db, user.id, today):
+            skipped_leave += 1
+            continue
+        db.add(Attendance(user_id=user.id, date=today, status="absent"))
+        absent_count += 1
     db.commit()
     audit_record(
         db,
         action="attendance.mark_absent_bulk",
         actor=current_user,
         entity_type="attendance",
-        details={"date": str(today), "count": absent_count},
+        details={"date": str(today), "count": absent_count, "skipped_leave": skipped_leave},
     )
-    return {"message": f"Marked {absent_count} users as absent for {today}"}
+    return {
+        "message": f"Marked {absent_count} users as absent for {today}"
+        + (f" ({skipped_leave} skipped: approved leave)" if skipped_leave else ""),
+        "absent_count": absent_count,
+        "skipped_leave": skipped_leave,
+        "skipped_holiday": False,
+    }
 
 
 @router.put("/attendance/{attendance_id}")
@@ -155,8 +188,17 @@ async def update_attendance_record(
             attendance.time_in = datetime.strptime(time_in, "%H:%M").time()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM")
+        user_for_shift = db.query(User).filter(User.id == attendance.user_id).first()
+        attendance.is_late = scheduling_is_late(
+            attendance.time_in,
+            user_for_shift.shift if user_for_shift else None,
+            attendance.date,
+        )
     elif status == "absent":
         attendance.time_in = None
+        attendance.time_out = None
+        attendance.is_late = None
+        attendance.is_early_leave = None
 
     db.commit()
     db.refresh(attendance)
@@ -181,7 +223,10 @@ async def update_attendance_record(
             "user": UserResponse.model_validate(user),
             "date": attendance.date.isoformat(),
             "time_in": attendance.time_in.isoformat() if attendance.time_in else None,
+            "time_out": attendance.time_out.isoformat() if attendance.time_out else None,
             "status": attendance.status,
+            "is_late": attendance.is_late,
+            "is_early_leave": attendance.is_early_leave,
             "created_at": attendance.created_at.isoformat(),
         },
     }
@@ -206,8 +251,17 @@ async def bulk_update_attendance(
                     attendance.time_in = datetime.strptime(time_in, "%H:%M").time()
                 except ValueError:
                     continue
+                record_user = db.query(User).filter(User.id == attendance.user_id).first()
+                attendance.is_late = scheduling_is_late(
+                    attendance.time_in,
+                    record_user.shift if record_user else None,
+                    attendance.date,
+                )
             elif status == "absent":
                 attendance.time_in = None
+                attendance.time_out = None
+                attendance.is_late = None
+                attendance.is_early_leave = None
             updated_count += 1
     db.commit()
     audit_record(
@@ -252,6 +306,8 @@ async def mark_user_present(
     else:
         attendance = Attendance(user_id=user.id, date=today, time_in=time_obj, status="present")
         db.add(attendance)
+    attendance.is_late = scheduling_is_late(time_obj, user.shift, today)
+    attendance.is_early_leave = None  # no checkout recorded yet
 
     db.commit()
     db.refresh(attendance)

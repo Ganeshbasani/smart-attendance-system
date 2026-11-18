@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.core.time_utils import utc_now_naive
@@ -19,6 +19,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     face_registered = Column(Boolean, default=False)
     face_encoding_path = Column(String, nullable=True)
+    # Optional work schedule. NULL → late/early flags are not computed.
+    shift_id = Column(Integer, ForeignKey("shifts.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=utc_now_naive)
 
     attendances = relationship("Attendance", back_populates="user")
@@ -28,4 +30,12 @@ class User(Base):
     )
     face_images = relationship(
         "FaceImage", back_populates="user", cascade="all, delete-orphan",
+    )
+    shift = relationship("Shift", back_populates="users")
+    leave_requests = relationship(
+        "LeaveRequest", back_populates="user", cascade="all, delete-orphan"
+    )
+    correction_requests = relationship(
+        "AttendanceCorrectionRequest", back_populates="user",
+        cascade="all, delete-orphan",
     )

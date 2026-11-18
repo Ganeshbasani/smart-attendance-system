@@ -6,6 +6,15 @@ from app.schemas.user import (
     UserChangePassword,
 )
 from app.schemas.attendance import AttendanceResponse
+from app.schemas.scheduling import (
+    CorrectionRequestCreate,
+    HolidayCreate,
+    LeaveRequestCreate,
+    ReviewRequest,
+    ShiftAssignment,
+    ShiftCreate,
+    ShiftUpdate,
+)
 
 __all__ = [
     "UserCreate",
@@ -14,4 +23,11 @@ __all__ = [
     "UserUpdateProfile",
     "UserChangePassword",
     "AttendanceResponse",
+    "ShiftCreate",
+    "ShiftUpdate",
+    "ShiftAssignment",
+    "HolidayCreate",
+    "LeaveRequestCreate",
+    "CorrectionRequestCreate",
+    "ReviewRequest",
 ]

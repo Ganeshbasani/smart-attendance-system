@@ -135,6 +135,13 @@ export const userAPI = {
     return api.get(`/user/attendance?start_date=${today}&end_date=${today}`);
   },
   getRegisteredFaces: () => api.get('/user/face/images'),
+  getMyShift: () => api.get('/user/shift'),
+  getHolidays: (year) => api.get(`/user/holidays${year ? `?year=${year}` : ''}`),
+  getLeaveRequests: () => api.get('/user/leave-requests'),
+  createLeaveRequest: (payload) => api.post('/user/leave-requests', payload),
+  getCorrectionRequests: () => api.get('/user/correction-requests'),
+  createCorrectionRequest: (payload) => api.post('/user/correction-requests', payload),
+  checkout: () => api.post('/attendance/checkout'),
 };
 
 // Admin APIs
@@ -216,6 +223,38 @@ export const adminAPI = {
       },
     });
   },
+
+  // Shifts & holidays
+  getShifts: () => api.get('/admin/shifts'),
+  createShift: (shift) => api.post('/admin/shifts', shift),
+  updateShift: (shiftId, shift) => api.put(`/admin/shifts/${shiftId}`, shift),
+  deleteShift: (shiftId) => api.delete(`/admin/shifts/${shiftId}`),
+  assignUserShift: (userId, shiftId) =>
+    api.post(`/admin/users/${userId}/shift-assignment`, { shift_id: shiftId }),
+  getHolidays: (year) =>
+    api.get(`/admin/holidays${year ? `?year=${year}` : ''}`),
+  createHoliday: (holiday) => api.post('/admin/holidays', holiday),
+  deleteHoliday: (holidayId) => api.delete(`/admin/holidays/${holidayId}`),
+
+  // Leave & correction approval queues
+  getLeaveRequests: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/leave-requests?${queryParams}`);
+  },
+  reviewLeaveRequest: (requestId, decision, note) =>
+    api.post(`/admin/leave-requests/${requestId}/${decision}`, { note }),
+  getCorrectionRequests: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/correction-requests?${queryParams}`);
+  },
+  reviewCorrectionRequest: (requestId, decision, note) =>
+    api.post(`/admin/correction-requests/${requestId}/${decision}`, { note }),
 };
 
 // Analytics APIs

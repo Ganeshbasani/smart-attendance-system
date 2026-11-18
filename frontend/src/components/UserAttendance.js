@@ -18,8 +18,24 @@ import {
   Alert,
   CircularProgress,
   LinearProgress,
+  Stack,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
 } from '@mui/material';
+import { Edit } from '@mui/icons-material';
 import { userAPI } from '../services/api';
+
+const statusChipStyle = (status) => {
+  if (status === 'approved') return { background: '#dcfce7', color: '#16a34a' };
+  if (status === 'rejected') return { background: '#fee2e2', color: '#dc2626' };
+  return { background: '#fef3c7', color: '#d97706' };
+};
 
 const UserAttendance = () => {
   const [user, setUser] = useState(null);
@@ -27,16 +43,77 @@ const UserAttendance = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   // Filter states
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
+  // Correction request states
+  const [corrections, setCorrections] = useState([]);
+  const [correctionDialog, setCorrectionDialog] = useState({
+    open: false,
+    record: null,
+    proposed_status: 'present',
+    proposed_time_in: '09:00',
+    reason: '',
+  });
+  const [correctionSaving, setCorrectionSaving] = useState(false);
+  const [correctionError, setCorrectionError] = useState('');
+  const [correctionBanner, setCorrectionBanner] = useState(null);
+
+  const fetchCorrections = async () => {
+    try {
+      const response = await userAPI.getCorrectionRequests();
+      setCorrections(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch correction requests:', err);
+    }
+  };
+
+  const openCorrection = (record) => {
+    setCorrectionError('');
+    setCorrectionDialog({
+      open: true,
+      record,
+      proposed_status: record.status === 'present' ? 'absent' : 'present',
+      proposed_time_in: record.time_in ? record.time_in.slice(0, 5) : '09:00',
+      reason: '',
+    });
+  };
+
+  const handleCorrectionSubmit = async () => {
+    setCorrectionError('');
+    if (!correctionDialog.reason.trim()) {
+      setCorrectionError('Please explain what needs correcting.');
+      return;
+    }
+    setCorrectionSaving(true);
+    try {
+      await userAPI.createCorrectionRequest({
+        attendance_id: correctionDialog.record.id,
+        proposed_status: correctionDialog.proposed_status,
+        proposed_time_in:
+          correctionDialog.proposed_status === 'present'
+            ? correctionDialog.proposed_time_in
+            : null,
+        reason: correctionDialog.reason.trim(),
+      });
+      setCorrectionDialog({ ...correctionDialog, open: false, reason: '' });
+      setCorrectionBanner({ type: 'success', text: 'Correction request submitted for review.' });
+      await fetchCorrections();
+    } catch (err) {
+      setCorrectionError(err.response?.data?.detail || 'Failed to submit correction request.');
+    } finally {
+      setCorrectionSaving(false);
+    }
+  };
+
   useEffect(() => {
     fetchAttendanceData();
     fetchAttendanceStats();
+    fetchCorrections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -351,6 +428,7 @@ const UserAttendance = () => {
                     <TableCell sx={{ fontWeight: '700', color: '#212E46', fontFamily: '"Inter", sans-serif' }}>Time In</TableCell>
                     <TableCell sx={{ fontWeight: '700', color: '#212E46', fontFamily: '"Inter", sans-serif' }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: '700', color: '#212E46', fontFamily: '"Inter", sans-serif' }}>Recorded At</TableCell>
+                    <TableCell sx={{ fontWeight: '700', color: '#212E46', fontFamily: '"Inter", sans-serif' }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -388,6 +466,25 @@ const UserAttendance = () => {
                           minute: '2-digit'
                         })}
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          startIcon={<Edit sx={{ fontSize: 15 }} />}
+                          onClick={() => openCorrection(record)}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            fontSize: '0.75rem',
+                            fontFamily: '"Inter", sans-serif',
+                            color: '#212E46',
+                            border: '1px solid #e7e5e4',
+                            borderRadius: '8px',
+                            '&:hover': { background: '#fafaf9', border: '1px solid #d6d3d1' },
+                          }}
+                        >
+                          Correct
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -396,6 +493,166 @@ const UserAttendance = () => {
           )}
         </Box>
       </Card>
+
+      {/* My correction requests */}
+      <Card elevation={0} sx={{ mt: 3, borderRadius: '20px', border: '1px solid #e7e5e4', background: '#ffffff' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" fontWeight="800" sx={{ color: '#212E46', fontFamily: '"Inter", sans-serif', mb: 0.5 }}>
+            My Correction Requests
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#78716c', fontFamily: '"Inter", sans-serif', display: 'block', mb: 2 }}>
+            An administrator must approve a request before your record changes
+          </Typography>
+          {correctionBanner && (
+            <Alert
+              severity={correctionBanner.type}
+              onClose={() => setCorrectionBanner(null)}
+              sx={{ borderRadius: '12px', fontFamily: '"Inter", sans-serif', mb: 2 }}
+            >
+              {correctionBanner.text}
+            </Alert>
+          )}
+          {corrections.length === 0 ? (
+            <Typography variant="body2" sx={{ color: '#9ca3af', fontFamily: '"Inter", sans-serif' }}>
+              No correction requests yet.
+            </Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              {corrections.map((req) => (
+                <Box
+                  key={req.id}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    border: '1px solid #f3f4f6',
+                    borderRadius: '12px',
+                    p: 2,
+                    gap: 2,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 220 }}>
+                    <Typography variant="body2" fontWeight="700" sx={{ color: '#212E46', fontFamily: '"Inter", sans-serif' }}>
+                      {req.attendance?.date} — {req.attendance?.current_status}
+                      {req.attendance?.current_time_in ? ` @ ${req.attendance.current_time_in.slice(0, 5)}` : ''}
+                      {' → '}
+                      {req.proposed_status}
+                      {req.proposed_time_in ? ` @ ${req.proposed_time_in.slice(0, 5)}` : ''}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#78716c', fontFamily: '"Inter", sans-serif', display: 'block' }}>
+                      {req.reason}
+                    </Typography>
+                    {req.review_note && (
+                      <Typography variant="caption" sx={{ color: '#9ca3af', fontFamily: '"Inter", sans-serif', display: 'block' }}>
+                        Review note: {req.review_note}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Chip
+                    label={req.status}
+                    size="small"
+                    sx={{
+                      ...statusChipStyle(req.status),
+                      fontWeight: 700,
+                      fontSize: '0.65rem',
+                      fontFamily: '"Inter", sans-serif',
+                      textTransform: 'capitalize',
+                    }}
+                  />
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Correction request dialog */}
+      <Dialog
+        open={correctionDialog.open}
+        onClose={() => setCorrectionDialog({ ...correctionDialog, open: false })}
+        PaperProps={{ sx: { borderRadius: '20px', p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#212E46', fontFamily: '"Inter", sans-serif' }}>
+          Request Attendance Correction
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1, minWidth: 380 }}>
+            {correctionError && (
+              <Alert severity="error" sx={{ borderRadius: '10px', fontFamily: '"Inter", sans-serif' }}>
+                {correctionError}
+              </Alert>
+            )}
+            {correctionDialog.record && (
+              <Alert severity="info" sx={{ borderRadius: '10px', fontFamily: '"Inter", sans-serif' }}>
+                Record: {correctionDialog.record.date} — currently{' '}
+                {correctionDialog.record.status}
+                {correctionDialog.record.time_in
+                  ? ` @ ${correctionDialog.record.time_in.slice(0, 5)}`
+                  : ''}
+              </Alert>
+            )}
+            <FormControl size="small" fullWidth>
+              <InputLabel sx={{ fontFamily: '"Inter", sans-serif' }}>Proposed status</InputLabel>
+              <Select
+                value={correctionDialog.proposed_status}
+                label="Proposed status"
+                onChange={(e) =>
+                  setCorrectionDialog({ ...correctionDialog, proposed_status: e.target.value })
+                }
+                sx={{ borderRadius: '12px', fontFamily: '"Inter", sans-serif' }}
+              >
+                <MenuItem value="present">Present</MenuItem>
+                <MenuItem value="absent">Absent</MenuItem>
+              </Select>
+            </FormControl>
+            {correctionDialog.proposed_status === 'present' && (
+              <TextField
+                label="Proposed time in"
+                type="time"
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                value={correctionDialog.proposed_time_in}
+                onChange={(e) =>
+                  setCorrectionDialog({ ...correctionDialog, proposed_time_in: e.target.value })
+                }
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontFamily: '"Inter", sans-serif' } }}
+              />
+            )}
+            <TextField
+              label="Reason (required)"
+              multiline
+              minRows={3}
+              value={correctionDialog.reason}
+              onChange={(e) => setCorrectionDialog({ ...correctionDialog, reason: e.target.value })}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontFamily: '"Inter", sans-serif' } }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setCorrectionDialog({ ...correctionDialog, open: false })}
+            sx={{ textTransform: 'none', fontWeight: 700, fontFamily: '"Inter", sans-serif', color: '#78716c' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={correctionSaving}
+            onClick={handleCorrectionSubmit}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              fontFamily: '"Inter", sans-serif',
+              borderRadius: '10px',
+              background: '#212E46',
+              '&:hover': { background: '#2c3b5c' },
+            }}
+          >
+            {correctionSaving ? 'Submitting…' : 'Submit Request'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       </Container>
     </Box>
   );
