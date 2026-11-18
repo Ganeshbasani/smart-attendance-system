@@ -1,6 +1,7 @@
 """FastAPI application factory and entrypoint."""
 
 import os
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -8,12 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.config import settings, validate_security
 from app.core.limiter import limiter
 from app.core.logging import configure_logging, get_logger
-from app.db.session import run_migrations
+from app.core.request_context import RequestContext, reset_request_context, set_request_context
+from app.db.session import run_migrations, SessionLocal
 from app.api.routers import (
     admin,
     analytics,
@@ -58,6 +61,28 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Total-Count"],
     )
+
+    @app.middleware("http")
+    async def request_context_middleware(request: Request, call_next):
+        # Correlation id: accept a caller-supplied one (sanitized), otherwise
+        # generate. Exposed back on the response and injected into every log
+        # line and audit record for this request.
+        incoming = request.headers.get(settings.REQUEST_ID_HEADER, "")
+        request_id = incoming.strip()[:128] if incoming.strip() else uuid.uuid4().hex
+        client_host = request.client.host if request.client else None
+        token = set_request_context(
+            RequestContext(
+                request_id=request_id,
+                ip_address=client_host,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+        try:
+            response = await call_next(request)
+        finally:
+            reset_request_context(token)
+        response.headers[settings.REQUEST_ID_HEADER] = request_id
+        return response
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -106,6 +131,29 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     async def health():
         return {"status": "ok"}
+
+    @app.get("/ready", tags=["health"])
+    async def ready():
+        """
+        Readiness probe: verifies the process can reach the database.
+
+        `/health` only proves the process is up; `/ready` proves it can serve
+        traffic. Returns 503 so orchestrators and load balancers route away
+        from an instance whose DB is unavailable.
+        """
+        try:
+            db = SessionLocal()
+            try:
+                db.execute(text("SELECT 1"))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Readiness check failed: database unreachable")
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "detail": "Database unreachable."},
+            )
+        return {"status": "ready"}
 
     for router in (
         auth.router,

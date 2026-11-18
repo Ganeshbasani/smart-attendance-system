@@ -196,6 +196,17 @@ export const adminAPI = {
   },
   getUserFaceDetails: (userId) => api.get(`/admin/user/${userId}/face/details`),
   getUserFaceImages: (userId) => api.get(`/admin/user/${userId}/face/images`),
+  getAuditLogs: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.action) queryParams.append('action', params.action);
+    if (params.actor_email) queryParams.append('actor_email', params.actor_email);
+    if (params.entity_type) queryParams.append('entity_type', params.entity_type);
+    if (params.start_date) queryParams.append('start_date', params.start_date);
+    if (params.end_date) queryParams.append('end_date', params.end_date);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/audit-logs?${queryParams}`);
+  },
   bulkDeleteFaceData: (userIds) => {
     const formData = new FormData();
     userIds.forEach(id => formData.append('user_ids', id));

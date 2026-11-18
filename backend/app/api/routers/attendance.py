@@ -12,10 +12,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.time_utils import now_local, today_local
+from app.core.uploads import read_upload_with_limits
 from app.api.deps import get_optional_current_user
 from app.db.session import get_db
 from app.models import Attendance, User
 from app.schemas import AttendanceResponse, UserResponse
+from app.services.audit import record as audit_record
 from app.services.face_recognition import face_service
 from app.services.liveness import LivenessError, challenge_store, verify_challenge_frames
 
@@ -88,7 +90,7 @@ async def mark_attendance(
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
             path = os.path.join(settings.UPLOAD_DIR, f"temp_{timestamp}_{i}.jpg")
             with open(path, "wb") as buffer:
-                buffer.write(await upload.read())
+                buffer.write(await read_upload_with_limits(upload))
             temp_paths.append(path)
         logger.info(f"Attendance frames received: {len(temp_paths)}")
 
@@ -189,6 +191,19 @@ async def mark_attendance(
                 existing_attendance.time_in = now_local().time()
                 db.commit()
                 db.refresh(existing_attendance)
+                audit_record(
+                    db,
+                    action="attendance.mark",
+                    actor=current_user,
+                    entity_type="attendance",
+                    entity_id=str(existing_attendance.id),
+                    details={
+                        "user": user.unique_id,
+                        "date": str(today),
+                        "changed_from": "absent",
+                        "confidence": confidence,
+                    },
+                )
                 return {
                     "message": f"Attendance updated for {user.full_name} - status changed from absent to present",
                     "user": UserResponse.model_validate(user),
@@ -223,6 +238,14 @@ async def mark_attendance(
             raise _already_marked(user, winner)
         db.refresh(attendance)
         logger.info(f"Attendance marked for {user.full_name} ({user.unique_id})")
+        audit_record(
+            db,
+            action="attendance.mark",
+            actor=current_user,
+            entity_type="attendance",
+            entity_id=str(attendance.id),
+            details={"user": user.unique_id, "date": str(today), "confidence": confidence},
+        )
 
         return {
             "message": f"Attendance marked successfully for {user.full_name}",

@@ -1,7 +1,6 @@
 """Authentication endpoints."""
 
 import secrets
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -14,9 +13,11 @@ from app.core.security import (
     validate_password_strength,
     verify_password,
 )
+from app.core.time_utils import now_local
 from app.db.session import get_db
 from app.models import User
 from app.schemas import LoginRequest, UserCreate, UserResponse
+from app.services.audit import record as audit_record
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -31,7 +32,7 @@ async def register(request: Request, user_data: UserCreate, db: Session = Depend
     validate_password_strength(user_data.password)
     hashed_password = get_password_hash(user_data.password)
     # Generate unique ID with timestamp + 4 random hex digits to avoid collisions
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    timestamp = now_local().strftime('%Y%m%d%H%M%S')
     random_suffix = secrets.token_hex(2)  # 4 hex characters
     unique_id = f"USR{timestamp}{random_suffix}"
 
@@ -55,6 +56,15 @@ async def register(request: Request, user_data: UserCreate, db: Session = Depend
 
     access_token = create_access_token(data={"sub": db_user.email})
 
+    audit_record(
+        db,
+        action="auth.register",
+        actor=db_user,
+        entity_type="user",
+        entity_id=unique_id,
+        details={"role": user_role},
+    )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -74,6 +84,14 @@ async def login(request: Request, login_data: LoginRequest, db: Session = Depend
         raise HTTPException(status_code=403, detail="Account is deactivated. Please contact administrator.")
 
     access_token = create_access_token(data={"sub": user.email})
+
+    audit_record(
+        db,
+        action="auth.login",
+        actor=user,
+        entity_type="user",
+        entity_id=user.unique_id,
+    )
 
     return {
         "access_token": access_token,

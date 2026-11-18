@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     DATASET_DIR: str = str(BASE_DIR / "dataset")
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
 
+    # ----- Uploads -----
+    # Biometric images are multipart uploads; reject anything that is not an
+    # image and anything larger than this before it is written to disk.
+    MAX_UPLOAD_SIZE_MB: int = 10
+    ALLOWED_IMAGE_CONTENT_TYPES: str = "image/jpeg,image/png,image/webp"
+
+    # ----- Observability -----
+    # Correlation id propagated through logs and returned to the caller.
+    REQUEST_ID_HEADER: str = "X-Request-ID"
+    # Audit logging can be disabled for local experiments, but is on by
+    # default because admin/biometric actions must be traceable.
+    AUDIT_LOG_ENABLED: bool = True
+
     # ----- Face recognition -----
     FACE_MODEL_PACK: str = "buffalo_l"
     FACE_USE_GPU: bool = False
@@ -132,6 +145,18 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
+
+    @property
+    def allowed_image_content_types(self) -> List[str]:
+        return [
+            c.strip().lower()
+            for c in self.ALLOWED_IMAGE_CONTENT_TYPES.split(",")
+            if c.strip()
+        ]
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 @lru_cache

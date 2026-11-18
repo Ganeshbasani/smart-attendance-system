@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy import (
     Column,
     Date,
@@ -13,6 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now_naive
 from app.db.base import Base
 
 
@@ -35,6 +34,6 @@ class Attendance(Base):
     date = Column(Date, nullable=False)
     time_in = Column(Time, nullable=True)
     status = Column(String, nullable=False)  # "present" or "absent"
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
 
     user = relationship("User", back_populates="attendances")
