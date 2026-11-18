@@ -198,15 +198,32 @@ class FaceRecognitionService:
         }
 
     def check_image_liveness(self, image_path: str) -> Dict:
+        """
+        Presence-only check — NOT anti-spoofing.
+
+        This can only verify that a detectable face is in the frame; it runs no
+        spoof model and cannot tell a real face from a printed photo or a
+        screen. `spoof_probability` is therefore reported as null (unmeasured)
+        rather than a fabricated score, and `anti_spoofing` is explicitly
+        false. Real liveness is the server-verified head-turn challenge in
+        services.liveness, enforced on /attendance/mark and /face/register.
+        """
         face, _ = self._detect_primary_face(image_path)
         present = face is not None
         return {
             "is_live": present,
             "confidence": round(float(face.det_score) * 100, 1) if present else 0.0,
-            "spoof_probability": 0.0 if present else 100.0,
+            "spoof_probability": None,
+            "method": "face_presence_only",
+            "anti_spoofing": False,
             "checks_passed": {"face_present": present},
             "recommendations": [] if present else ["No face detected"],
-            "note": "Active blink/motion liveness is verified client-side at capture time.",
+            "note": (
+                "Face presence only — no anti-spoofing model runs here, so this "
+                "cannot detect a photo or screen; spoof probability is "
+                "unmeasured (null). Active liveness is verified by the "
+                "head-turn challenge at attendance/registration time."
+            ),
         }
 
     def validate_face_image(self, image_path: str) -> bool:
@@ -361,9 +378,15 @@ class FaceRecognitionService:
     def _refresh_cache(self, db) -> None:
         from app.models import FaceEmbedding, User
 
+        # Only rows computed with the currently configured model pack belong in
+        # the gallery: embeddings from a different ArcFace pack live in a
+        # different vector space, and mixing them into one cosine search would
+        # produce meaningless matches. The signature is computed over the same
+        # filtered set so a stale-row change never needlessly rebuilds the cache.
+        model_filter = FaceEmbedding.model == self.model_name
         signature = db.query(
             func.count(FaceEmbedding.id), func.max(FaceEmbedding.updated_at)
-        ).one()
+        ).filter(model_filter).one()
 
         if signature == self._cache_signature and self._cache_embeddings is not None:
             return
@@ -371,10 +394,34 @@ class FaceRecognitionService:
         rows = (
             db.query(FaceEmbedding, User.unique_id)
             .join(User, FaceEmbedding.user_id == User.id)
+            .filter(model_filter)
             .all()
         )
+
+        # Defensive dimension check: same model pack implies the same embedding
+        # dimension, but a corrupted row with a different width cannot be
+        # compared either. Keep the majority dimension (ties resolved by first
+        # row, so the choice is deterministic) and drop disagreements with a
+        # warning rather than failing recognition outright.
+        dims = [fe.dim for fe, _ in rows]
+        if dims:
+            counts: Dict[int, int] = {}
+            first_seen: Dict[int, int] = {}
+            for i, d in enumerate(dims):
+                counts[d] = counts.get(d, 0) + 1
+                first_seen.setdefault(d, i)
+            expected_dim = max(counts, key=lambda d: (counts[d], -first_seen[d]))
+        else:
+            expected_dim = None
+
         mats, labels = [], []
         for fe, unique_id in rows:
+            if expected_dim is not None and fe.dim != expected_dim:
+                logger.warning(
+                    f"Skipping embedding row for {unique_id}: dim {fe.dim} != "
+                    f"expected {expected_dim} for model '{self.model_name}'"
+                )
+                continue
             arr = np.frombuffer(fe.embeddings, dtype=np.float32).reshape(fe.count, fe.dim)
             mats.append(arr)
             labels.extend([unique_id] * fe.count)
@@ -382,6 +429,59 @@ class FaceRecognitionService:
         self._cache_embeddings = np.vstack(mats).astype(np.float32) if mats else None
         self._cache_labels = labels
         self._cache_signature = signature
+
+    def model_status(self, db) -> Dict:
+        """
+        Inventory of stored embeddings against the configured model pack.
+
+        Used by GET /admin/face/model-status to answer the operational question
+        "is the gallery internally consistent?" — after FACE_MODEL_PACK is
+        changed, rows computed with the old pack are excluded from matching
+        (see _refresh_cache) and those users must re-register.
+        """
+        from app.models import FaceEmbedding, User
+
+        total_rows = db.query(func.count(FaceEmbedding.id)).scalar() or 0
+        matching_rows = (
+            db.query(func.count(FaceEmbedding.id))
+            .filter(FaceEmbedding.model == self.model_name)
+            .scalar()
+            or 0
+        )
+        by_model = dict(
+            db.query(FaceEmbedding.model, func.count(FaceEmbedding.id))
+            .group_by(FaceEmbedding.model)
+            .all()
+        )
+        stale = (
+            db.query(User.unique_id, User.full_name, FaceEmbedding.model)
+            .join(User, FaceEmbedding.user_id == User.id)
+            .filter(FaceEmbedding.model != self.model_name)
+            .all()
+        )
+        stale_users = [
+            {"unique_id": uid, "full_name": name, "model": model}
+            for uid, name, model in stale
+        ]
+
+        return {
+            "configured_model": self.model_name,
+            "total_embedding_rows": int(total_rows),
+            "matching_rows": int(matching_rows),
+            "stale_rows": int(total_rows - matching_rows),
+            "by_model": {str(k): int(v) for k, v in by_model.items()},
+            "stale_users": stale_users,
+            "gallery_usable": int(matching_rows) > 0,
+            "thresholds": {
+                "match": self.match_threshold,
+                "duplicate": self.duplicate_threshold,
+                "attendance_min_confidence": settings.FACE_ATTENDANCE_MIN_CONFIDENCE,
+            },
+            "note": (
+                "Rows recorded with a different model pack are excluded from "
+                "recognition. Affected users must re-register their face."
+            ),
+        }
 
     def invalidate_cache(self) -> None:
         self._cache_signature = None

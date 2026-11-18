@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     AUDIT_LOG_ENABLED: bool = True
 
     # ----- Face recognition -----
+    # ArcFace model pack used for detection + embeddings. Every enrolled
+    # embedding row records the pack it was computed with; only rows matching
+    # this pack are loaded into the matching cache (see face_recognition
+    # _refresh_cache). After changing this, existing enrollments must be
+    # re-registered — GET /admin/face/model-status lists the stale users.
+    # Calibrate FACE_MATCH_THRESHOLD / FACE_DUPLICATE_THRESHOLD against your
+    # own labeled photos with `python -m scripts.benchmark_thresholds`.
     FACE_MODEL_PACK: str = "buffalo_l"
     FACE_USE_GPU: bool = False
     FACE_MATCH_THRESHOLD: float = 0.42
@@ -105,14 +112,25 @@ class Settings(BaseSettings):
     # asked for. This is the part a pre-recorded video cannot reliably satisfy,
     # since the direction is chosen per attempt.
     #
-    # OFF by default and intentionally so. The webcam preview is mirrored and
-    # react-webcam mirrors its screenshots too, so the browser's notion of
-    # "left" may be the opposite sign to InsightFace's yaw. Enforcing an
-    # unverified sign would reject every genuine user. The signed figure is
-    # logged as `yaw_directional` on every attempt; once real logs confirm the
-    # sign, set this to true. Blocking static photos does not depend on it —
-    # that comes from the sweep magnitude below, which is sign-independent.
+    # OFF by default and intentionally so. Two sign conventions stack: the
+    # capture path mirrors every frame (FaceCamera sets react-webcam's
+    # `mirrored`, which flips the screenshot bytes), and InsightFace's yaw
+    # sign is only documented, never verified against this pipeline. Enforcing
+    # an unverified sign would reject every genuine user. Both directional
+    # extents are logged on every attempt (`yaw_directional` and
+    # `yaw_directional_opposite`); measure the actual convention from real
+    # logs with `python -m scripts.calibrate_direction`, set
+    # LIVENESS_DIRECTION_SIGN to the sign it recommends, then flip this to
+    # true. Blocking static photos does not depend on any of it — that comes
+    # from the sweep magnitude below, which is sign-independent.
     LIVENESS_REQUIRE_DIRECTION: bool = False
+    # Selects which yaw extent counts as "the requested direction" when
+    # enforcing LIVENESS_REQUIRE_DIRECTION: +1 = documented convention
+    # (historical behaviour), -1 = capture path mirrors frames, so a correct
+    # turn measures as motion the opposite way. Only meaningful once
+    # calibrated from real capture logs — see scripts/calibrate_direction.py.
+    # Does NOT affect the sweep-magnitude check, which is sign-independent.
+    LIVENESS_DIRECTION_SIGN: int = 1
     # Frames needed to evidence a turn. Too few and there is no motion to check.
     LIVENESS_MIN_FRAMES: int = 5
     LIVENESS_MAX_FRAMES: int = 30

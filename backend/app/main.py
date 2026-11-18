@@ -41,6 +41,22 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.DATASET_DIR, exist_ok=True)
     run_migrations()
     logger.info(f"{settings.PROJECT_NAME} v{settings.API_VERSION} started")
+    # Effective AI/ML configuration in one line, so an operator can tell from
+    # the logs exactly which gallery and liveness rules a process is running
+    # (thresholds and the direction-sign calibration are easy to mis-set per
+    # environment and otherwise invisible until a match fails).
+    logger.info(
+        "Face/liveness config: "
+        f"model_pack={settings.FACE_MODEL_PACK} "
+        f"match_threshold={settings.FACE_MATCH_THRESHOLD} "
+        f"duplicate_threshold={settings.FACE_DUPLICATE_THRESHOLD} "
+        f"min_confidence={settings.FACE_ATTENDANCE_MIN_CONFIDENCE} "
+        f"liveness_challenge={settings.LIVENESS_CHALLENGE_ENABLED} "
+        f"min_yaw_sweep={settings.LIVENESS_MIN_YAW_SWEEP} "
+        f"require_direction={settings.LIVENESS_REQUIRE_DIRECTION} "
+        f"direction_sign={settings.LIVENESS_DIRECTION_SIGN:+d} "
+        f"enforce_planarity={settings.LIVENESS_ENFORCE_PLANARITY}"
+    )
     yield
 
 

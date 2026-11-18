@@ -393,6 +393,21 @@ async def get_users_face_status(
     }
 
 
+@router.get("/face/model-status")
+async def get_face_model_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user),
+):
+    """
+    Consistency of the stored face gallery against the configured model pack.
+
+    Embeddings computed with a different ArcFace pack are excluded from
+    recognition; this reports how many rows are affected and which users must
+    re-register after a FACE_MODEL_PACK change.
+    """
+    return face_service.model_status(db)
+
+
 @router.delete("/user/{user_id}/face")
 async def delete_user_face_data(
     user_id: str,

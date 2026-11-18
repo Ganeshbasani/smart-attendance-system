@@ -81,6 +81,19 @@ const AdminFaceManagement = () => {
     withoutFaces: 0
   });
 
+  // Gallery/model consistency (informational line under the header): shows the
+  // configured ArcFace pack and whether any stored enrollments are stale.
+  // Failure leaves the line hidden — it must never block face management.
+  const [modelStatus, setModelStatus] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminAPI.getFaceModelStatus()
+      .then((resp) => { if (!cancelled) setModelStatus(resp.data); })
+      .catch((err) => console.error(err));
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -240,6 +253,24 @@ const AdminFaceManagement = () => {
           <Typography variant="body1" sx={{ color: '#78716c', fontFamily: '"Inter", sans-serif' }}>
             Manage user face registrations, view status, and re-register faces
           </Typography>
+          {modelStatus && (
+            <Typography
+              variant="caption"
+              sx={{
+                display: 'block',
+                mt: 1,
+                fontFamily: '"Inter", sans-serif',
+                color: modelStatus.stale_rows > 0 ? '#b45309' : '#9ca3af',
+              }}
+            >
+              Recognition model: {modelStatus.configured_model} · gallery{' '}
+              {modelStatus.matching_rows} active
+              {modelStatus.stale_rows > 0
+                ? ` · ${modelStatus.stale_rows} stale enrollment(s) excluded — affected users must re-register`
+                : ''}
+              {' '}· match ≥ {modelStatus.thresholds.match} / confidence ≥ {modelStatus.thresholds.attendance_min_confidence}%
+            </Typography>
+          )}
         </Box>
 
         {/* Alerts */}

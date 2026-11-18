@@ -26,7 +26,16 @@ async def check_liveness_endpoint(
     file: UploadFile = File(...),
     current_user: User = Depends(deps.get_current_user),
 ):
-    """Real-time liveness detection (anti-spoofing)."""
+    """
+    Legacy single-image check: face presence only.
+
+    Despite the path name this endpoint runs NO anti-spoofing model — it
+    cannot distinguish a real face from a photo or a screen. The response
+    carries `anti_spoofing: false` and an unmeasured (null) spoof_probability
+    so it cannot be mistaken for one. Server-verified liveness is the
+    head-turn challenge submitted with /attendance/mark and /face/register.
+    Kept for API compatibility; the current frontend does not call it.
+    """
     temp_path = None
     try:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
@@ -39,6 +48,9 @@ async def check_liveness_endpoint(
             "liveness_check": liveness_result,
             "timestamp": datetime.now().isoformat(),
             "status": "live_person" if liveness_result["is_live"] else "spoof_detected",
+            # Additive honesty flag: `status` above is kept verbatim for API
+            # compatibility, but nothing here performs anti-spoofing.
+            "anti_spoofing": False,
         }
     except HTTPException:
         raise

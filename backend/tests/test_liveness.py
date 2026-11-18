@@ -228,6 +228,80 @@ def test_metrics_reported_for_calibration():
         assert key in metrics
 
 
+# ── direction-sign calibration knob ───────────────────────────────────────────
+#
+# Two sign conventions stack in production (react-webcam mirrors the frames,
+# InsightFace's yaw sign is only documented), so the sign is configurable
+# rather than guessed. LIVENESS_DIRECTION_SIGN selects which yaw extent counts
+# as "the requested direction": +1 = documented convention (historical
+# behaviour), -1 = mirrored capture. The raw figures are always logged so the
+# choice can be measured from real logs with scripts/calibrate_direction.
+
+def test_sign_plus_preserves_historical_behaviour(monkeypatch):
+    monkeypatch.setattr(settings, "LIVENESS_REQUIRE_DIRECTION", True)
+    monkeypatch.setattr(settings, "LIVENESS_DIRECTION_SIGN", 1)
+    yaws = [0.0, 6.0, 13.0, 20.0, 24.0, 10.0]
+    with _patch_measurements(yaws):
+        result = verify_challenge_frames(_challenge("left"), _paths(len(yaws)))
+    metrics = result["metrics"]
+    assert metrics["yaw_directional_effective"] == metrics["yaw_directional"]
+    assert metrics["direction_sign"] == 1
+
+
+def test_sign_minus_counts_opposite_extent_for_mirrored_capture(monkeypatch):
+    """
+    Mirrored capture: a subject who complies with "turn left" measures motion
+    the other way round. Sign -1 must count that motion, not reject it.
+    """
+    monkeypatch.setattr(settings, "LIVENESS_REQUIRE_DIRECTION", True)
+    monkeypatch.setattr(settings, "LIVENESS_DIRECTION_SIGN", -1)
+    yaws = [0.0, -6.0, -13.0, -20.0, -24.0, -10.0]
+    with _patch_measurements(yaws):
+        result = verify_challenge_frames(_challenge("left"), _paths(len(yaws)))
+    metrics = result["metrics"]
+    assert metrics["yaw_directional"] == 0.0              # raw requested extent
+    assert metrics["yaw_directional_opposite"] == 24.0    # extent the other way
+    assert metrics["yaw_directional_effective"] == 24.0   # what was enforced
+    assert metrics["direction_sign"] == -1
+
+
+def test_sign_minus_still_rejects_the_wrong_turn(monkeypatch):
+    """Under sign -1, motion in the documented direction is the wrong turn."""
+    monkeypatch.setattr(settings, "LIVENESS_REQUIRE_DIRECTION", True)
+    monkeypatch.setattr(settings, "LIVENESS_DIRECTION_SIGN", -1)
+    yaws = [0.0, 6.0, 13.0, 20.0, 24.0, 10.0]
+    with _patch_measurements(yaws):
+        with pytest.raises(LivenessError, match="turn left"):
+            verify_challenge_frames(_challenge("left"), _paths(len(yaws)))
+
+
+def test_static_frames_rejected_regardless_of_sign(monkeypatch):
+    """
+    The sweep-magnitude check is sign-independent: a photo or phone screen
+    fails under either sign setting.
+    """
+    monkeypatch.setattr(settings, "LIVENESS_REQUIRE_DIRECTION", True)
+    monkeypatch.setattr(settings, "LIVENESS_DIRECTION_SIGN", -1)
+    yaws = [4.0, 4.0, 4.01, 3.99, 4.0, 4.0]
+    with _patch_measurements(yaws):
+        with pytest.raises(LivenessError, match="No head movement"):
+            verify_challenge_frames(_challenge("left"), _paths(len(yaws)))
+
+
+def test_metrics_report_both_extents_and_sign():
+    """Both extents are logged on every attempt so the sign stays measurable."""
+    yaws = [0.0, 8.0, 16.0, 24.0, 12.0, 2.0]
+    with _patch_measurements(yaws):
+        metrics = verify_challenge_frames(_challenge("left"), _paths(len(yaws)))["metrics"]
+    for key in (
+        "yaw_directional", "yaw_directional_opposite",
+        "yaw_directional_effective", "direction_sign",
+    ):
+        assert key in metrics
+    assert metrics["yaw_directional"] == 24.0
+    assert metrics["yaw_directional_opposite"] == 0.0
+
+
 # ── endpoint integration ─────────────────────────────────────────────────────
 
 def _jpeg(seed):

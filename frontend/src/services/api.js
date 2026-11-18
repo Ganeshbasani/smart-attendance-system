@@ -189,6 +189,9 @@ export const adminAPI = {
   
   // Face Management
   getUsersFaceStatus: () => api.get('/admin/users/face-status'),
+  // Gallery consistency vs the configured ArcFace pack (stale-model users,
+  // thresholds). See GET /admin/face/model-status.
+  getFaceModelStatus: () => api.get('/admin/face/model-status'),
   deleteUserFaceData: (userId) => api.delete(`/admin/user/${userId}/face`),
   registerUserFace: (userId, files) => {
     const formData = new FormData();
