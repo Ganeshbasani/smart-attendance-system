@@ -113,8 +113,23 @@ const AnalyticsDashboard = () => {
 
   const { liveStats, departments, dailyTrends, weeklyStats, userStats, anomalies } = analytics;
 
+  // Days where nobody was expected (holiday / everyone on approved leave)
+  // must not plot as a false 0% — gap them and label the reason in the
+  // tooltip instead.
+  const trendData = dailyTrends.map((d) => ({
+    ...d,
+    attendance: d.expected === 0 ? null : d.attendance,
+    onTime: d.expected === 0 ? null : d.onTime,
+  }));
+
+  const presentSub = [
+    `${liveStats.attendanceRate || 0}% attendance rate`,
+    liveStats.holidayToday ? 'Holiday' : null,
+    (liveStats.onLeaveToday || 0) > 0 ? `${liveStats.onLeaveToday} on leave` : null,
+  ].filter(Boolean).join(' • ');
+
   const statCards = [
-    { label: 'Currently Present', value: `${liveStats.currentlyPresent || 0}/${liveStats.totalEmployees || 0}`, sub: `${liveStats.attendanceRate || 0}% attendance rate`, color: '#212E46' },
+    { label: 'Currently Present', value: `${liveStats.currentlyPresent || 0}/${liveStats.totalEmployees || 0}`, sub: presentSub, color: '#212E46' },
     { label: 'On Time Today', value: liveStats.onTimeToday || 0, sub: `Avg arrival: ${liveStats.averageArrival || 'N/A'}`, color: '#16a34a' },
     { label: 'Late Today', value: liveStats.lateToday || 0, sub: `Peak arrival: ${liveStats.peakHour || 'N/A'}`, color: '#f97316' },
     { label: 'Anomalies', value: anomalies.length || 0, sub: 'Low-attendance users', color: '#dc2626' },
@@ -207,7 +222,7 @@ const AnalyticsDashboard = () => {
                   Attendance Trend
                 </Typography>
                 <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart data={dailyTrends}>
+                  <AreaChart data={trendData}>
                     <defs>
                       <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#212E46" stopOpacity={0.8} />
@@ -223,7 +238,13 @@ const AnalyticsDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <RechartsTooltip
                       contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid #e7e5e4', borderRadius: '12px', fontFamily: '"Inter", sans-serif' }}
-                      formatter={(value, name) => [`${value}%`, name]}
+                      formatter={(value, name, item) => {
+                        if (value == null) {
+                          const row = item && item.payload;
+                          return [row && row.holiday ? (row.holidayName || 'Holiday') : 'No data', name];
+                        }
+                        return [`${value}%`, name];
+                      }}
                     />
                     <Legend />
                     <Area type="monotone" dataKey="attendance" stroke="#212E46" fillOpacity={1} fill="url(#colorAttendance)" name="Attendance %" />

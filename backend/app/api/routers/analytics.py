@@ -1,16 +1,18 @@
 """Admin analytics, reporting, and anomaly endpoints (real data only)."""
 
+import csv
+import io
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.time_utils import now_local
 from app.db.session import get_db
-from app.models import Attendance, User
+from app.models import Attendance, Holiday, LeaveRequest, User
 from app.services import analytics as svc
 
 logger = logging.getLogger("smart_attendance.analytics")
@@ -28,6 +30,31 @@ def _period_start(period: str, today: datetime) -> datetime:
     return today - timedelta(days=7)  # default: week
 
 
+def _scheduling_context(start_date, end_date, db: Session):
+    """Approved-leave map and holiday names for the period.
+
+    Analytics must not count users who are not expected (approved leave) or
+    org-wide days off as attendance failures — both come from the Phase 2
+    scheduling domain.
+    """
+    leaves = (
+        db.query(LeaveRequest)
+        .filter(
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= end_date,
+            LeaveRequest.end_date >= start_date,
+        )
+        .all()
+    )
+    holidays = {
+        h.date: h.name
+        for h in db.query(Holiday)
+        .filter(Holiday.date >= start_date, Holiday.date <= end_date)
+        .all()
+    }
+    return svc.on_leave_by_date(leaves), holidays
+
+
 def _build_dashboard(period: str, db: Session) -> dict:
     today = now_local()
     start_date = _period_start(period, today).date()
@@ -36,12 +63,20 @@ def _build_dashboard(period: str, db: Session) -> dict:
     records = db.query(Attendance).filter(Attendance.date >= start_date).all()
     users = db.query(User).all()
     total_users = len(users)
+    on_leave_by_date, holidays = _scheduling_context(start_date, end_date, db)
+    today_leave = on_leave_by_date.get(end_date, frozenset())
 
     return {
-        "liveStats": svc.live_stats(users, records),
-        "departments": svc.department_breakdown(users, records),
-        "dailyTrends": svc.daily_trends(records, start_date, end_date, total_users),
-        "weeklyStats": svc.weekly_patterns(records, start_date, end_date, total_users),
+        "liveStats": svc.live_stats(
+            users, records, on_leave_ids=today_leave, is_holiday=end_date in holidays
+        ),
+        "departments": svc.department_breakdown(users, records, on_leave_ids=today_leave),
+        "dailyTrends": svc.daily_trends(
+            records, start_date, end_date, total_users, on_leave_by_date, holidays
+        ),
+        "weeklyStats": svc.weekly_patterns(
+            records, start_date, end_date, total_users, on_leave_by_date, holidays
+        ),
         "userStats": svc.user_performance(users, records),
         "anomalies": svc.detect_anomalies(records, users),
         "period": period,
@@ -74,22 +109,26 @@ async def export_analytics_data(
         live = data["liveStats"]
 
         if format.lower() == "csv":
-            rows = [
-                ("metric", "value"),
-                ("period", period),
-                ("generated_at", data["generatedAt"]),
-                ("total_employees", live["totalEmployees"]),
-                ("currently_present", live["currentlyPresent"]),
-                ("attendance_rate_percent", live["attendanceRate"]),
-                ("on_time_today", live["onTimeToday"]),
-                ("late_today", live["lateToday"]),
-                ("absent_today", live["absentToday"]),
-                ("punctuality_rate_percent", live["punctualityRate"]),
-                ("average_arrival", live["averageArrival"]),
-            ]
-            csv_content = "\n".join(f"{k},{v}" for k, v in rows)
+            # stdlib csv writer: values are quoted correctly, so a future
+            # metric containing a comma cannot break the row structure.
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(("metric", "value"))
+            writer.writerow(("period", period))
+            writer.writerow(("generated_at", data["generatedAt"]))
+            writer.writerow(("total_employees", live["totalEmployees"]))
+            writer.writerow(("currently_present", live["currentlyPresent"]))
+            writer.writerow(("attendance_rate_percent", live["attendanceRate"]))
+            writer.writerow(("on_time_today", live["onTimeToday"]))
+            writer.writerow(("late_today", live["lateToday"]))
+            writer.writerow(("absent_today", live["absentToday"]))
+            writer.writerow(("punctuality_rate_percent", live["punctualityRate"]))
+            writer.writerow(("average_arrival", live["averageArrival"]))
+            writer.writerow(("expected_today", live["expectedToday"]))
+            writer.writerow(("on_leave_today", live["onLeaveToday"]))
+            writer.writerow(("holiday_today", str(live["holidayToday"]).lower()))
             return Response(
-                content=csv_content,
+                content=buf.getvalue(),
                 media_type="text/csv",
                 headers={"Content-Disposition": f"attachment; filename=analytics-{period}.csv"},
             )
@@ -113,11 +152,17 @@ async def generate_automated_report(
         title = {"daily": "Daily", "monthly": "Monthly"}.get(report_type, "Weekly") + " Attendance Report"
 
         start_date = _period_start(period, today).date()
+        end_date = today.date()
         records = db.query(Attendance).filter(Attendance.date >= start_date).all()
         users = db.query(User).all()
+        on_leave_by_date, holidays = _scheduling_context(start_date, end_date, db)
 
-        present_user_ids = {r.user_id for r in records if r.status == "present"}
-        attendance_rate = round(len(present_user_ids) / max(len(users), 1) * 100, 1)
+        daily = svc.daily_trends(
+            records, start_date, end_date, len(users), on_leave_by_date, holidays
+        )
+        # Mean of per-day rates on days where anyone was expected — a real
+        # attendance rate, not "users present at least once".
+        attendance_rate = svc.average_daily_rate(daily)
 
         return {
             "title": title,
@@ -138,8 +183,8 @@ async def generate_automated_report(
 
 @router.get("/anomalies")
 async def get_attendance_anomalies(
-    days: int = 7,
-    severity: str = "all",
+    days: int = Query(7, ge=1, le=366),
+    severity: str = Query("all", pattern="^(all|high|medium|low)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):

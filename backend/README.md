@@ -40,6 +40,24 @@ Sending uses the standard library (`smtplib`), is synchronous with a short
 timeout, and is best-effort — a failure is logged and never fails the request.
 `NOTIFICATIONS_ENABLED=false` turns the whole feature off.
 
+## Analytics
+
+`/analytics/*` endpoints (admin-only) compute every metric from real
+attendance rows — nothing is simulated. Since Phase 5 they are aware of the
+scheduling domain:
+
+* **Punctuality is shift-aware** — the `is_late` flag written at mark time
+  (shift start + grace) is preferred; only rows from users without a shift
+  fall back to the legacy 09:00 rule.
+* **Approved leave is not absence** — users on approved leave are excluded
+  from expected-people denominators (`absentToday`, per-day attendance %).
+* **Holidays are flagged, not scored** — on a holiday `expectedToday`/daily
+  `expected` is 0 and rows carry `holiday`/`holidayName`, so charts can gap
+  the day instead of plotting a false 0%.
+* CSV export uses the stdlib `csv` writer (correct quoting);
+  `/analytics/anomalies` validates `days` (1–366) and `severity`
+  (`all|high|medium|low`).
+
 ## Face recognition tuning & calibration
 
 All effective values are logged once at startup (`Face/liveness config: ...`),
