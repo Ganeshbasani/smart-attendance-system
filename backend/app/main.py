@@ -25,6 +25,7 @@ from app.api.routers import (
     auth,
     face,
     liveness,
+    notifications,
     users,
     user_scheduling,
 )
@@ -180,6 +181,7 @@ def create_app() -> FastAPI:
         attendance.router,
         users.router,
         user_scheduling.router,
+        notifications.router,
         admin.router,
         admin_scheduling.router,
         analytics.router,

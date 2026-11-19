@@ -26,6 +26,20 @@ survives restarts and redeploys.
 
 Schema is managed by Alembic and applied automatically at startup.
 
+## Notifications
+
+Decision events create an in-app notification for the affected user
+(`notifications` table): leave approve/reject, attendance-correction
+approve/reject, and shift assignment changes. Users read them at
+`GET /notifications` (plus `/unread-count`, `/{id}/read`, `/read-all`),
+always scoped to the authenticated user; the navbar bell shows the badge.
+
+Email is an optional secondary channel, **off by default**: set
+`EMAIL_NOTIFY_ENABLED=true` and `SMTP_*` (see `.env.example`) to send a copy.
+Sending uses the standard library (`smtplib`), is synchronous with a short
+timeout, and is best-effort — a failure is logged and never fails the request.
+`NOTIFICATIONS_ENABLED=false` turns the whole feature off.
+
 ## Face recognition tuning & calibration
 
 All effective values are logged once at startup (`Face/liveness config: ...`),

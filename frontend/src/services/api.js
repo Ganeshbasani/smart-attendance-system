@@ -271,6 +271,20 @@ export const analyticsAPI = {
     api.get(`/analytics/anomalies?days=${days}&severity=${severity}`),
 };
 
+// Notifications (current user only)
+export const notificationsAPI = {
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    if (params.unreadOnly) queryParams.append('unread_only', 'true');
+    return api.get(`/notifications?${queryParams}`);
+  },
+  unreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllRead: () => api.post('/notifications/read-all'),
+};
+
 // Utility function to convert webcam capture to file
 export const webcamCaptureToFile = (imageSrc, filename = 'webcam-capture.jpg') => {
   return fetch(imageSrc)

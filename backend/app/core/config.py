@@ -74,6 +74,24 @@ class Settings(BaseSettings):
     # default because admin/biometric actions must be traceable.
     AUDIT_LOG_ENABLED: bool = True
 
+    # ----- Notifications -----
+    # In-app notifications (leave/correction decisions, shift changes). Rows
+    # are always scoped to a single user; a notification failure never breaks
+    # the operation that triggered it (logged and swallowed, like audit).
+    NOTIFICATIONS_ENABLED: bool = True
+    # Optional email copy of each notification. OFF by default — requires the
+    # SMTP_* settings below. Sending is best-effort and synchronous (this
+    # stack has no task queue); failures are logged and never raised.
+    EMAIL_NOTIFY_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    # Envelope sender; falls back to SMTP_USERNAME when empty.
+    SMTP_FROM: str = ""
+    SMTP_TLS: bool = True
+    SMTP_TIMEOUT_SECONDS: int = 5
+
     # ----- Face recognition -----
     # ArcFace model pack used for detection + embeddings. Every enrolled
     # embedding row records the pack it was computed with; only rows matching

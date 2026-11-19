@@ -2,6 +2,7 @@ from app.models.user import User
 from app.models.attendance import Attendance
 from app.models.face import FaceEmbedding, FaceImage
 from app.models.audit import AuditLog
+from app.models.notifications import Notification
 from app.models.scheduling import (
     AttendanceCorrectionRequest,
     Holiday,
@@ -15,6 +16,7 @@ __all__ = [
     "FaceEmbedding",
     "FaceImage",
     "AuditLog",
+    "Notification",
     "Shift",
     "Holiday",
     "LeaveRequest",

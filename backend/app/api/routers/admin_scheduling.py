@@ -26,6 +26,7 @@ from app.schemas import (
     ShiftUpdate,
 )
 from app.services.audit import record as audit_record
+from app.services.notifications import notify
 from app.services.scheduling import is_late
 
 logger = logging.getLogger("smart_attendance.admin_scheduling")
@@ -185,6 +186,32 @@ async def assign_user_shift(
         entity_id=user_id,
         details={"from_shift": previous, "to_shift": payload.shift_id},
     )
+    # Notify the affected user when their assignment actually changes (in-app
+    # + optional email). Never raises; re-assigning the same shift is silent.
+    if payload.shift_id != previous:
+        if payload.shift_id is not None:
+            shift_message = (
+                f"Your work shift is now {shift.name} "
+                f"({shift.start_time.strftime('%H:%M')}-"
+                f"{shift.end_time.strftime('%H:%M')}, "
+                f"{shift.grace_minutes} min grace)."
+            )
+            shift_title = "Shift assigned"
+            shift_type = "shift_assigned"
+        else:
+            shift_message = "Your work shift assignment was cleared."
+            shift_title = "Shift cleared"
+            shift_type = "shift_cleared"
+        notify(
+            db,
+            user_id=user.id,
+            type=shift_type,
+            title=shift_title,
+            message=shift_message,
+            entity_type="user",
+            entity_id=user_id,
+            email_to=user.email,
+        )
     return {
         "message": "Shift assigned" if payload.shift_id else "Shift cleared",
         "user_id": user_id,
@@ -337,6 +364,24 @@ async def _review_leave(
             "range": f"{req.start_date}..{req.end_date}",
         },
     )
+    # Tell the applicant the outcome (in-app + optional email). Never raises.
+    if req.user:
+        message = (
+            f"Your {req.leave_type} leave request for {req.start_date} to "
+            f"{req.end_date} was {decision}."
+        )
+        if req.review_note:
+            message += f" Reviewer note: {req.review_note}"
+        notify(
+            db,
+            user_id=req.user_id,
+            type="leave_decision",
+            title=f"Leave request {decision}",
+            message=message,
+            entity_type="leave_request",
+            entity_id=str(req.id),
+            email_to=req.user.email,
+        )
     return _leave_dict(req, req.user)
 
 
@@ -497,4 +542,21 @@ async def _review_correction(
             "from_time_in": str(previous_time) if previous_time else None,
         },
     )
+    # Tell the applicant the outcome (in-app + optional email). Never raises.
+    if req.user:
+        message = (
+            f"Your attendance correction for {attendance.date} was {decision}."
+        )
+        if req.review_note:
+            message += f" Reviewer note: {req.review_note}"
+        notify(
+            db,
+            user_id=req.user_id,
+            type="correction_decision",
+            title=f"Attendance correction {decision}",
+            message=message,
+            entity_type="correction_request",
+            entity_id=str(req.id),
+            email_to=req.user.email,
+        )
     return _correction_dict(req)
