@@ -13,6 +13,7 @@ import EmployeeDashboard from './components/EmployeeDashboard';
 import UserProfile from './components/UserProfile';
 import UserAttendance from './components/UserAttendance';
 import Navbar from './components/Navbar';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -93,9 +94,12 @@ function App() {
 
   return (
     <AuthContext.Provider value={authValue}>
-      <AppLayout>
-        <Navbar />
-        <Routes>
+      {/* A crash anywhere below shows a styled fallback instead of a
+          white screen; the error is logged, never shown to the user. */}
+      <ErrorBoundary>
+        <AppLayout>
+          <Navbar />
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route 
@@ -137,8 +141,9 @@ function App() {
           
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </AppLayout>
+          </Routes>
+        </AppLayout>
+      </ErrorBoundary>
     </AuthContext.Provider>
   );
 }

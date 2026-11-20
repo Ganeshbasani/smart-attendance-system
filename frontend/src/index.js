@@ -5,8 +5,6 @@ import App from './App';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 
 let theme = createTheme({
   palette: {
@@ -87,18 +85,6 @@ root.render(
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <App />
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>

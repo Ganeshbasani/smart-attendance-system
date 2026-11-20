@@ -164,7 +164,6 @@ const UserProfile = () => {
     
     try {
       const response = await userAPI.getRegisteredFaces();
-      console.log('Face API Response:', response); // Debug log
       
       // Check if response has data
       if (response && response.data) {
@@ -177,7 +176,7 @@ const UserProfile = () => {
         setError('Invalid response from server');
       }
     } catch (error) {
-      console.error('Error loading faces:', error); // Debug log
+      console.error('Error loading faces:', error);
       let errorMsg = 'Failed to load registered faces';
       if (error.response?.status === 404) {
         errorMsg = 'No face data found. Please register your face first.';
@@ -507,7 +506,7 @@ const UserProfile = () => {
                           />
                         ) : (
                           <Typography variant="body1" sx={{ color: '#1f2937' }}>
-                            {user?.department || 'CSE'}
+                            {user?.department || 'Unassigned'}
                           </Typography>
                         )}
                       </Box>
@@ -616,7 +615,7 @@ const UserProfile = () => {
                           Member Since
                         </Typography>
                         <Typography variant="body1" sx={{ color: '#1f2937' }}>
-                          {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '09/06/2025'}
+                          {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                         </Typography>
                       </Box>
                     </Box>
