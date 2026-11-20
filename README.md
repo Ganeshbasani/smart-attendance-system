@@ -248,10 +248,12 @@ git clone https://github.com/Ganeshbasani/smart-attendance-system.git
 cd smart-attendance-system
 ```
 
-Create a root `.env`:
+Create a root `.env` (read by docker compose for `${VAR}` substitution):
 
-```env
-SECRET_KEY=replace-with-a-strong-random-secret
+```bash
+cp .env.example .env
+# then edit .env: generate SECRET_KEY with
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 Start the full stack:
@@ -404,7 +406,7 @@ cd frontend
 npm run build
 ```
 
-The repository includes GitHub Actions CI for backend tests and the frontend build.
+The repository includes GitHub Actions CI: backend tests plus a single-alembic-head check, and frontend tests plus a production build that fails on any ESLint warning (`CI=true`).
 
 ---
 

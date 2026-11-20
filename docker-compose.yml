@@ -9,7 +9,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: attendance
-      POSTGRES_PASSWORD: attendance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-attendance}
       POSTGRES_DB: attendance
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -22,7 +22,7 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg2://attendance:attendance@db:5432/attendance
+      DATABASE_URL: postgresql+psycopg2://attendance:${POSTGRES_PASSWORD:-attendance}@db:5432/attendance
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       BACKEND_CORS_ORIGINS: http://localhost:3000
