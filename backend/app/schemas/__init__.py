@@ -15,6 +15,22 @@ from app.schemas.scheduling import (
     ShiftCreate,
     ShiftUpdate,
 )
+from app.schemas.academic import (
+    AcademicSessionCreate,
+    AcademicSessionOut,
+    ClassSectionCreate,
+    ClassSectionOut,
+    CourseCreate,
+    CourseOut,
+    DepartmentCreate,
+    DepartmentOut,
+    EnrollRequest,
+    EnrollmentOut,
+    StudentCreate,
+    StudentOut,
+    TeacherCreate,
+    TeacherOut,
+)
 
 __all__ = [
     "UserCreate",
@@ -30,4 +46,18 @@ __all__ = [
     "LeaveRequestCreate",
     "CorrectionRequestCreate",
     "ReviewRequest",
+    "DepartmentCreate",
+    "DepartmentOut",
+    "AcademicSessionCreate",
+    "AcademicSessionOut",
+    "CourseCreate",
+    "CourseOut",
+    "TeacherCreate",
+    "TeacherOut",
+    "StudentCreate",
+    "StudentOut",
+    "ClassSectionCreate",
+    "ClassSectionOut",
+    "EnrollRequest",
+    "EnrollmentOut",
 ]

@@ -5,6 +5,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.api import deps
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.security import (
@@ -37,7 +38,9 @@ async def register(request: Request, user_data: UserCreate, db: Session = Depend
     unique_id = f"USR{timestamp}{random_suffix}"
 
     admin_email = settings.ADMIN_EMAIL
-    user_role = "admin" if admin_email and user_data.email == admin_email else "user"
+    # AttendX roles: admin (auto-assigned to ADMIN_EMAIL), teacher, student.
+    # Legacy rows with role="user" remain valid and count as students.
+    user_role = "admin" if admin_email and user_data.email == admin_email else "student"
 
     db_user = User(
         email=user_data.email,
@@ -98,3 +101,11 @@ async def login(request: Request, login_data: LoginRequest, db: Session = Depend
         "token_type": "bearer",
         "user": UserResponse.model_validate(user),
     }
+
+
+@router.get("/me")
+async def get_me(
+    current_user: User = Depends(deps.get_current_user),
+):
+    """Return the authenticated account (available at /auth/me and /api/v1/auth/me)."""
+    return {"user": UserResponse.model_validate(current_user)}

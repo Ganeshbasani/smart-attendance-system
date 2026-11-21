@@ -9,6 +9,15 @@ from app.models.scheduling import (
     LeaveRequest,
     Shift,
 )
+from app.models.academic import (
+    AcademicSession,
+    ClassEnrollment,
+    ClassSection,
+    Course,
+    Department,
+    Student,
+    Teacher,
+)
 
 __all__ = [
     "User",
@@ -21,4 +30,11 @@ __all__ = [
     "Holiday",
     "LeaveRequest",
     "AttendanceCorrectionRequest",
+    "Department",
+    "AcademicSession",
+    "Course",
+    "Teacher",
+    "Student",
+    "ClassSection",
+    "ClassEnrollment",
 ]

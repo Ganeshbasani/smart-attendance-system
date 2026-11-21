@@ -26,6 +26,40 @@ survives restarts and redeploys.
 
 Schema is managed by Alembic and applied automatically at startup.
 
+## Academic domain & API v1 (AttendX Phase 2)
+
+Additive endpoints under **`/api/v1`** introduce the academic domain without
+changing any legacy route. All previous paths (e.g. `/auth/login`,
+`/attendance`) keep working; identical aliases are available under
+`/api/v1/auth/login`, `/api/v1/attendance`, etc.
+
+**Roles:** `admin`, `teacher`, `student`. Legacy accounts with role `user`
+were migrated to `student`; permission checks still accept `user` wherever
+`student` is expected. New registrations receive `student` by default;
+`ADMIN_EMAIL` still receives `admin`.
+
+**Endpoints (admin-only mutations; authenticated reads):**
+
+| Resource | Paths |
+| --- | --- |
+| Departments | `GET/POST /api/v1/departments`, `PUT/DELETE /api/v1/departments/{id}` |
+| Academic sessions | `GET/POST /api/v1/academic-sessions`, `PUT/DELETE /api/v1/academic-sessions/{id}` |
+| Courses | `GET/POST /api/v1/courses`, `PUT/DELETE /api/v1/courses/{id}` |
+| Teachers | `GET/POST /api/v1/teachers`, `GET/PUT/DELETE /api/v1/teachers/{id}` |
+| Students | `GET/POST /api/v1/students`, `GET/PUT/DELETE /api/v1/students/{id}`, `GET /api/v1/students/me` |
+| Classes | `GET/POST /api/v1/classes`, `GET/PUT/DELETE /api/v1/classes/{id}` |
+| Enrollment | `GET /api/v1/classes/{id}/students`, `POST /api/v1/classes/{id}/enrollments`, `DELETE /api/v1/classes/{id}/enrollments/{student_id}` |
+
+List endpoints accept `?skip=0&limit=50` (limit max 200). Students see only
+their own profile and enrolled classes; teachers can read academic data but
+cannot perform admin mutations. Every mutation writes an `audit_logs` row
+with an `academic.*` action. Duplicate unique fields return 409; missing
+referenced IDs return 404.
+
+Creating a teacher or student also creates the underlying `users` account
+(hashed password, unique ID); deleting the profile deletes that user and
+its related data via database cascades.
+
 ## Notifications
 
 Decision events create an in-app notification for the affected user

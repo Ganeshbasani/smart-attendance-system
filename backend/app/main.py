@@ -18,6 +18,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.request_context import RequestContext, reset_request_context, set_request_context
 from app.db.session import run_migrations, SessionLocal
 from app.api.routers import (
+    academic,
     admin,
     admin_scheduling,
     analytics,
@@ -174,7 +175,7 @@ def create_app() -> FastAPI:
             )
         return {"status": "ready"}
 
-    for router in (
+    routers = (
         auth.router,
         face.router,
         liveness.router,
@@ -185,8 +186,15 @@ def create_app() -> FastAPI:
         admin.router,
         admin_scheduling.router,
         analytics.router,
-    ):
+    )
+    for router in routers:
         app.include_router(router)
+        # Additive /api/v1 aliases: legacy paths stay live for existing clients.
+        # FastAPI derives operation ids from the prefixed path, so no collisions.
+        app.include_router(router, prefix="/api/v1")
+
+    # New academic domain already declares its /api/v1 prefix.
+    app.include_router(academic.router)
 
     return app
 
