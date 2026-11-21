@@ -18,9 +18,12 @@ import {
 import {
   MoreVert,
   Notifications,
+  LightMode,
+  DarkMode,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
+import { useThemeMode } from '../theme/ThemeContext';
 import { notificationsAPI } from '../services/api';
 
 const Navbar = () => {
@@ -29,6 +32,9 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { mode, toggleMode } = useThemeMode();
+  const dark = mode === 'dark';
+  const roleLabel = (role) => (role === 'admin' ? 'Administrator' : role === 'teacher' ? 'Teacher' : 'Student');
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileMenuEl, setMobileMenuEl] = useState(null);
   const [scrolled, setScrolled] = useState(false);
@@ -185,7 +191,12 @@ const Navbar = () => {
   const navigationItems = [
     { path: '/mark-attendance', label: 'Mark Attendance' },
     { path: '/dashboard', label: 'Dashboard' },
-    ...(user?.role === 'admin' ? [{ path: '/admin', label: 'Admin' }] : []),
+    { path: '/settings', label: 'Settings' },
+    ...(user?.role === 'admin' ? [
+      { path: '/admin', label: 'Admin' },
+      { path: '/admin/academic', label: 'Academic' },
+    ] : []),
+    ...(user?.role === 'teacher' ? [{ path: '/teacher', label: 'Classes' }] : []),
   ];
 
   const publicNavigationItems = [
@@ -199,10 +210,10 @@ const Navbar = () => {
       position="fixed"
       elevation={0}
       sx={{
-        background: shouldShowSolid ? 'rgba(255,255,255,0.85)' : 'transparent',
+        background: shouldShowSolid ? (dark ? 'rgba(30,41,59,0.92)' : 'rgba(255,255,255,0.85)') : 'transparent',
         backdropFilter: shouldShowSolid ? 'blur(20px) saturate(180%)' : 'none',
-        borderBottom: shouldShowSolid ? '1px solid rgba(0,0,0,0.06)' : '1px solid transparent',
-        color: shouldShowSolid ? '#1a1a1a' : '#ffffff',
+        borderBottom: shouldShowSolid ? (dark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)') : '1px solid transparent',
+        color: shouldShowSolid ? (dark ? '#e2e8f0' : '#1a1a1a') : '#ffffff',
         transition: 'all 0.3s ease',
         zIndex: 1100,
       }}
@@ -215,7 +226,7 @@ const Navbar = () => {
           sx={{ flexGrow: isMobile ? 1 : 0, cursor: 'pointer' }}
           onClick={() => navigateToPage('/')}
         >
-          <Typography variant="h6" fontWeight="700" sx={{ color: shouldShowSolid ? '#212E46' : '#ffffff', letterSpacing: '-0.02em', fontSize: '1.1rem', transition: 'color 0.3s ease', fontFamily: '"Inter", sans-serif' }}>
+          <Typography variant="h6" fontWeight="700" sx={{ color: shouldShowSolid ? (dark ? '#ffffff' : '#212E46') : '#ffffff', letterSpacing: '-0.02em', fontSize: '1.1rem', transition: 'color 0.3s ease', fontFamily: '"Inter", sans-serif' }}>
             SAS
           </Typography>
         </Box>
@@ -256,9 +267,9 @@ const Navbar = () => {
                   borderRadius: '10px',
                   fontWeight: 500,
                   textTransform: 'none',
-                  color: isActivePage(item.path) ? '#0f172a' : '#64748b',
-                  background: isActivePage(item.path) ? '#f1f5f9' : 'transparent',
-                  '&:hover': { background: '#f8fafc', color: '#0f172a' },
+                  color: isActivePage(item.path) ? (dark ? '#ffffff' : '#0f172a') : (dark ? '#94a3b8' : '#64748b'),
+                  background: isActivePage(item.path) ? (dark ? 'rgba(255,255,255,0.12)' : '#f1f5f9') : 'transparent',
+                  '&:hover': { background: dark ? 'rgba(255,255,255,0.08)' : '#f8fafc', color: dark ? '#ffffff' : '#0f172a' },
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -273,6 +284,15 @@ const Navbar = () => {
           <Box display="flex" alignItems="center" gap={2}>
             {!isMobile && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <IconButton
+                  onClick={toggleMode}
+                  aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+                  title={dark ? 'Light theme' : 'Dark theme'}
+                  sx={{ p: 1, color: shouldShowSolid ? (dark ? '#cbd5e1' : '#475569') : '#ffffff',
+                    '&:hover': { background: dark ? 'rgba(255,255,255,0.12)' : '#f1f5f9' } }}
+                >
+                  {dark ? <LightMode fontSize="small" /> : <DarkMode fontSize="small" />}
+                </IconButton>
                 <IconButton
                   onClick={handleNotifOpen}
                   aria-label="Notifications"
@@ -297,7 +317,7 @@ const Navbar = () => {
                     {user.full_name.split(' ')[0]}
                   </Typography>
                   <Typography variant="caption" sx={{ color: shouldShowSolid ? '#94a3b8' : 'rgba(255,255,255,0.7)', transition: 'color 0.3s ease' }}>
-                    {user.role === 'admin' ? 'Administrator' : 'Employee'}
+                    {roleLabel(user.role)}
                   </Typography>
                 </Box>
                 <IconButton
@@ -541,7 +561,7 @@ const Navbar = () => {
                   <Box>
                     <Typography variant="subtitle2" fontWeight="600">{user?.full_name}</Typography>
                     <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                      {user?.role === 'admin' ? 'Administrator' : 'Employee'}
+                      {roleLabel(user?.role)}
                     </Typography>
                   </Box>
                 </Box>
@@ -553,6 +573,9 @@ const Navbar = () => {
                   <Typography fontWeight={isActivePage(item.path) ? 600 : 500}>{item.label}</Typography>
                 </MenuItem>
               ))}
+              <MenuItem onClick={toggleMode}>
+                <Typography fontWeight="500">{dark ? 'Light theme' : 'Dark theme'}</Typography>
+              </MenuItem>
               <MenuItem onClick={() => navigateToPage('/profile')}
                 sx={{ background: isActivePage('/profile') ? '#f8fafc' : 'transparent' }}
               >

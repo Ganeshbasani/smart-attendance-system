@@ -177,6 +177,13 @@ async def test_uniqueness_and_fk_validation(client, admin_token):
     missing = await client.get("/api/v1/students/99999", headers=h)
     assert missing.status_code == 404
 
+    # Partial updates must not require a password (management UI enabler).
+    partial = await client.put(f"/api/v1/students/{first.json()['id']}", headers=h,
+                               json={"full_name": "Renamed Student"})
+    assert partial.status_code == 200, partial.text
+    assert partial.json()["full_name"] == "Renamed Student"
+    assert partial.json()["roll_number"] == "U001"
+
 
 # ── pagination & audit ────────────────────────────────────────────────────────
 

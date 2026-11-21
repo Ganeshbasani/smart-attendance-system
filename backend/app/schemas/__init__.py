@@ -28,8 +28,10 @@ from app.schemas.academic import (
     EnrollmentOut,
     StudentCreate,
     StudentOut,
+    StudentUpdate,
     TeacherCreate,
     TeacherOut,
+    TeacherUpdate,
 )
 
 __all__ = [
@@ -54,8 +56,10 @@ __all__ = [
     "CourseOut",
     "TeacherCreate",
     "TeacherOut",
+    "TeacherUpdate",
     "StudentCreate",
     "StudentOut",
+    "StudentUpdate",
     "ClassSectionCreate",
     "ClassSectionOut",
     "EnrollRequest",

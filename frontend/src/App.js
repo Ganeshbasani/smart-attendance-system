@@ -9,7 +9,10 @@ import Register from './components/Register';
 import FaceCapture from './components/FaceCapture';
 import MarkAttendance from './components/MarkAttendance';
 import AdminDashboard from './components/AdminDashboard';
-import EmployeeDashboard from './components/EmployeeDashboard';
+import StudentDashboard from './components/StudentDashboard';
+import TeacherDashboard from './components/TeacherDashboard';
+import AcademicManagement from './components/AcademicManagement';
+import SettingsPage from './components/SettingsPage';
 import UserProfile from './components/UserProfile';
 import UserAttendance from './components/UserAttendance';
 import Navbar from './components/Navbar';
@@ -79,6 +82,10 @@ function App() {
     token: localStorage.getItem('token')
   };
 
+  const isAdmin = user?.role === 'admin';
+  const isTeacher = user?.role === 'teacher';
+  const isStudent = user?.role === 'student' || user?.role === 'user';
+
   if (loading) {
     return (
       <Box
@@ -114,13 +121,31 @@ function App() {
           {/* Protected Routes - Admin Only */}
           <Route 
             path="/admin" 
-            element={user && user.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} 
+            element={user && isAdmin ? <AdminDashboard /> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/admin/academic"
+            element={user && isAdmin ? <AcademicManagement /> : <Navigate to="/login" />}
+          />
+
+          {/* Role portals */}
+          <Route
+            path="/teacher"
+            element={user && isTeacher ? <TeacherDashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/student"
+            element={user && isStudent ? <StudentDashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/settings"
+            element={user ? <SettingsPage /> : <Navigate to="/login" />}
           />
           
           {/* Protected Routes - All Users */}
           <Route 
             path="/dashboard" 
-            element={user ? (user.role === 'admin' ? <AdminDashboard /> : <EmployeeDashboard />) : <Navigate to="/login" />} 
+            element={user ? (isAdmin ? <AdminDashboard /> : (isTeacher ? <TeacherDashboard /> : <StudentDashboard />)) : <Navigate to="/login" />} 
           />
           <Route 
             path="/profile" 

@@ -73,6 +73,14 @@ class TeacherOut(BaseModel):
     created_at: datetime
 
 
+class TeacherUpdate(BaseModel):
+    """Partial update — the account password is never changed here."""
+    employee_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    department_id: Optional[int] = None
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    phone_number: Optional[str] = None
+
+
 class StudentCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
@@ -94,6 +102,15 @@ class StudentOut(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
     created_at: datetime
+
+
+class StudentUpdate(BaseModel):
+    """Partial update — the account password is never changed here."""
+    roll_number: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    department_id: Optional[int] = None
+    academic_session_id: Optional[int] = None
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    phone_number: Optional[str] = None
 
 
 class ClassSectionCreate(BaseModel):

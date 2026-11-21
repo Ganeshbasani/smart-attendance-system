@@ -51,6 +51,20 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (userData) => api.post('/auth/register', userData),
   login: (credentials) => api.post('/auth/login', credentials),
+  me: () => api.get('/auth/me'),
+};
+
+// Academic domain (AttendX Phase 2), versioned API. Resource names are the
+// path segments exposed by the backend: departments, academic-sessions,
+// courses, teachers, students, classes.
+export const academicAPI = {
+  list: (resource, params = {}) => api.get(`/api/v1/${resource}`, { params }),
+  create: (resource, data) => api.post(`/api/v1/${resource}`, data),
+  update: (resource, id, data) => api.put(`/api/v1/${resource}/${id}`, data),
+  remove: (resource, id) => api.delete(`/api/v1/${resource}/${id}`),
+  listEnrollments: (classId) => api.get(`/api/v1/classes/${classId}/students`),
+  enroll: (classId, studentId) => api.post(`/api/v1/classes/${classId}/enrollments`, { student_id: studentId }),
+  unenroll: (classId, studentId) => api.delete(`/api/v1/classes/${classId}/enrollments/${studentId}`),
 };
 
 // Liveness APIs

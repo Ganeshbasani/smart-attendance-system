@@ -38,8 +38,10 @@ from app.schemas import (
     EnrollmentOut,
     StudentCreate,
     StudentOut,
+    StudentUpdate,
     TeacherCreate,
     TeacherOut,
+    TeacherUpdate,
 )
 from app.services.audit import record as audit_record
 
@@ -346,20 +348,24 @@ async def get_teacher(
 
 @router.put("/teachers/{teacher_id}", response_model=TeacherOut)
 async def update_teacher(
-    teacher_id: int, payload: TeacherCreate,
+    teacher_id: int, payload: TeacherUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
     teacher = _get_or_404(db, Teacher, teacher_id, "Teacher")
-    if db.query(Teacher).filter(
-        Teacher.employee_id == payload.employee_id, Teacher.id != teacher_id
-    ).first():
-        raise HTTPException(status_code=409, detail="Employee ID already exists")
-    _check_fk(db, Department, payload.department_id, "Department")
-    teacher.employee_id = payload.employee_id
-    teacher.department_id = payload.department_id
-    teacher.user.full_name = payload.full_name
-    teacher.user.phone_number = payload.phone_number
+    if payload.employee_id:
+        if db.query(Teacher).filter(
+            Teacher.employee_id == payload.employee_id, Teacher.id != teacher_id
+        ).first():
+            raise HTTPException(status_code=409, detail="Employee ID already exists")
+        teacher.employee_id = payload.employee_id
+    if payload.department_id is not None:
+        _check_fk(db, Department, payload.department_id, "Department")
+        teacher.department_id = payload.department_id
+    if payload.full_name is not None:
+        teacher.user.full_name = payload.full_name
+    if payload.phone_number is not None:
+        teacher.user.phone_number = payload.phone_number
     db.commit()
     db.refresh(teacher)
     audit_record(db, action="academic.teacher.update", actor=current_user,
@@ -457,22 +463,27 @@ async def get_student(
 
 @router.put("/students/{student_id}", response_model=StudentOut)
 async def update_student(
-    student_id: int, payload: StudentCreate,
+    student_id: int, payload: StudentUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
     student = _get_or_404(db, Student, student_id, "Student")
-    if db.query(Student).filter(
-        Student.roll_number == payload.roll_number, Student.id != student_id
-    ).first():
-        raise HTTPException(status_code=409, detail="Roll number already exists")
-    _check_fk(db, Department, payload.department_id, "Department")
-    _check_fk(db, AcademicSession, payload.academic_session_id, "Academic session")
-    student.roll_number = payload.roll_number
-    student.department_id = payload.department_id
-    student.academic_session_id = payload.academic_session_id
-    student.user.full_name = payload.full_name
-    student.user.phone_number = payload.phone_number
+    if payload.roll_number:
+        if db.query(Student).filter(
+            Student.roll_number == payload.roll_number, Student.id != student_id
+        ).first():
+            raise HTTPException(status_code=409, detail="Roll number already exists")
+        student.roll_number = payload.roll_number
+    if payload.department_id is not None:
+        _check_fk(db, Department, payload.department_id, "Department")
+        student.department_id = payload.department_id
+    if payload.academic_session_id is not None:
+        _check_fk(db, AcademicSession, payload.academic_session_id, "Academic session")
+        student.academic_session_id = payload.academic_session_id
+    if payload.full_name is not None:
+        student.user.full_name = payload.full_name
+    if payload.phone_number is not None:
+        student.user.phone_number = payload.phone_number
     db.commit()
     db.refresh(student)
     audit_record(db, action="academic.student.update", actor=current_user,
