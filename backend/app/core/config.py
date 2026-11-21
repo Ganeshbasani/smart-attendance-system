@@ -174,6 +174,14 @@ class Settings(BaseSettings):
     # not. Deliberately low so genuine near-static faces are never rejected.
     ATTENDANCE_MIN_FRAME_DIFF: float = 0.75
 
+    # ----- Smart decision engine (AttendX Phase 7) -----
+    # Outcome bands for session-based verification. These are separate from the
+    # older kiosk thresholds so the existing attendance flow is unaffected.
+    # Values are deliberately conservative: uncertain matches go to review
+    # rather than being auto-accepted or rejected outright.
+    DECISION_MIN_CONFIDENCE: float = 50.0
+    DECISION_MIN_QUALITY: float = 45.0
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]

@@ -299,6 +299,20 @@ export const notificationsAPI = {
   markAllRead: () => api.post('/notifications/read-all'),
 };
 
+// Sessions + decision engine (AttendX Phase 7)
+export const sessionAPI = {
+  list: (params = {}) => api.get('/api/v1/sessions', { params }),
+  create: (data) => api.post('/api/v1/sessions', data),
+  get: (id) => api.get(`/api/v1/sessions/${id}`),
+  start: (id) => api.post(`/api/v1/sessions/${id}/start`),
+  stop: (id) => api.post(`/api/v1/sessions/${id}/stop`),
+  submitDecision: (id, data) => api.post(`/api/v1/sessions/${id}/decisions`, data),
+  records: (id, decision) => api.get(`/api/v1/sessions/${id}/records`, { params: decision ? { decision } : {} }),
+  events: (id, limit = 50) => api.get(`/api/v1/sessions/${id}/events`, { params: { limit } }),
+  manual: (id, data) => api.post(`/api/v1/sessions/${id}/manual`, data),
+  review: (id, studentId, data) => api.post(`/api/v1/sessions/${id}/review/${studentId}`, data),
+};
+
 // Utility function to convert webcam capture to file
 export const webcamCaptureToFile = (imageSrc, filename = 'webcam-capture.jpg') => {
   return fetch(imageSrc)

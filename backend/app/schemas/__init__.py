@@ -33,6 +33,15 @@ from app.schemas.academic import (
     TeacherOut,
     TeacherUpdate,
 )
+from app.schemas.sessions import (
+    DecisionOut,
+    DecisionRequest,
+    EventOut,
+    ManualOverrideRequest,
+    ReviewRequestManual,
+    SessionCreate,
+    SessionOut,
+)
 
 __all__ = [
     "UserCreate",
@@ -64,4 +73,11 @@ __all__ = [
     "ClassSectionOut",
     "EnrollRequest",
     "EnrollmentOut",
+    "SessionCreate",
+    "SessionOut",
+    "DecisionRequest",
+    "DecisionOut",
+    "ManualOverrideRequest",
+    "ReviewRequestManual",
+    "EventOut",
 ]

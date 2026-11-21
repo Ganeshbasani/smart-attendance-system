@@ -18,6 +18,7 @@ from app.models.academic import (
     Student,
     Teacher,
 )
+from app.models.sessions import AttendanceSession, SessionAttendance, VerificationEvent
 
 __all__ = [
     "User",
@@ -37,4 +38,7 @@ __all__ = [
     "Student",
     "ClassSection",
     "ClassEnrollment",
+    "AttendanceSession",
+    "SessionAttendance",
+    "VerificationEvent",
 ]

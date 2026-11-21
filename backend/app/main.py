@@ -27,6 +27,7 @@ from app.api.routers import (
     face,
     liveness,
     notifications,
+    sessions,
     users,
     user_scheduling,
 )
@@ -195,6 +196,7 @@ def create_app() -> FastAPI:
 
     # New academic domain already declares its /api/v1 prefix.
     app.include_router(academic.router)
+    app.include_router(sessions.router)
 
     return app
 

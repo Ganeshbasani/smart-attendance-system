@@ -190,6 +190,8 @@ const Navbar = () => {
 
   const navigationItems = [
     { path: '/mark-attendance', label: 'Mark Attendance' },
+    ...((user?.role === 'admin' || user?.role === 'teacher')
+      ? [{ path: '/live', label: 'Live Session' }] : []),
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/settings', label: 'Settings' },
     ...(user?.role === 'admin' ? [
