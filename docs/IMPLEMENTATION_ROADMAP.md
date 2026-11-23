@@ -1,110 +1,92 @@
-# AttendX — Implementation Roadmap
+# Implementation Roadmap
 
-**Status:** planning only. No implementation work has started under this master prompt. Existing committed work (hardening Phases 1–7) is treated as the baseline.
+This plan extends the current application incrementally. Each stage must remain runnable, preserve existing daily attendance and scheduling data, include tests, update [FEATURE_STATUS.md](FEATURE_STATUS.md), and report measured results separately from targets.
 
-## 1. Guiding principles
+## Current progress
 
-1. Extend, do not rewrite. No feature removal, no destructive migration of existing user data.
-2. Every phase: inspect → explain → list affected files → implement → backend tests → frontend tests + build → regression check → API-compatibility check → document → report.
-3. No invented model accuracy, no untested claims, no hardcoded secrets, no decorative buttons.
-4. Each phase ends with a runnable, tested increment and an 11-section report.
-5. Commit only on explicit user approval ("go ahead"). Never force-push or delete branches.
+| Stage | State | Notes |
+|---|---|---|
+| 0. Repository audit | Complete for current repository state | Audit and architecture docs refreshed; security and feature matrices added |
+| Session authorization | Implemented, tests added but not executable locally | Anonymous submissions blocked; student self/class scope; staff session ownership; event feed restricted |
+| 1. CV foundations | Partial | Added detector-only SCRFD path, quality scoring, ArcFace alignment/normalization, tests; local dependency environment lacks OpenCV |
+| 2. Multi-face tracking | Partial, standalone service | Two-stage Kalman/IoU ByteTrack-style association and stable ephemeral IDs; no camera/API/session integration or physical validation |
+| 3. PAD and synchronized RGB-IR | Not started | Keep active challenge; evaluate licensed candidates and hardware before deployment |
+| 4. Batch event sync and offline queue | Not started | Define authenticated device/event protocol first |
+| 5. Consent, encryption, retention, fallback | Not started | High priority before broader biometric deployment |
+| 6. Device registry, heartbeat, operations | Not started | No device metrics should be displayed until actual reporting exists |
+| 7. Dashboard integration and real-time push | Partial | Polling session monitor exists; connect scanner and add push only when justified |
+| 8. Evaluation, CI, deployment hardening | Partial | Existing CI remains; current tests could not execute in this environment |
 
-## 2. Phase map (master prompt phases ↔ repository state)
+## Stage 1 — Establish a trusted scanner contract
 
-| Phase | Goal | State at audit | Complexity | Key new artifacts |
-|---|---|---|---|---|
-| 0 | Repository audit | **Done by this audit** | — | `docs/PROJECT_AUDIT.md`, `CURRENT_ARCHITECTURE.md`, `TECHNICAL_DECISIONS.md`, this file |
-| 1 | Architecture / technical design | Partially covered by audit docs; needs approval on open decisions | Low | ADR sign-off |
-| 2 | Backend & database foundation | **Mostly present** (FastAPI, SQLAlchemy, Alembic, 10 tables, JWT, RBAC). Needs: 3 roles, academic-domain tables, v1 API prefix | Medium | migrations, `academic` models, `deps` role checks |
-| 3 | Professional frontend | React/MUI present; needs role portals, live monitor, design system, light/dark themes | High | new components, theme tokens, screens |
-| 4 | Multi-face detection & tracking | Single-face InsightFace present; add multi-face wrapper + tracker + stable IDs | High | CV pipeline module, tracker, frame selection |
-| 5 | Face quality & identity verification | Quality + ArcFace present; extend quality dimensions and decision instrumentation | Medium | quality scorer, verification event records |
-| 6 | Anti-spoofing integration | Active head-turn challenge present; passive PAD **not usable** (failed evaluation) — needs model re-evaluation with a real dataset | High / research | PAD adapter, evaluation harness, documented results |
-| 7 | Smart attendance decision engine | Logic scattered in routers; add unified engine + outcome vocabulary + session enforcement | Medium | decision engine service, session models |
-| 8 | Offline synchronization | Missing | Medium-high | SQLite event queue, idempotent batch endpoint, backoff, tests |
-| 9 | Analytics & anomaly detection | Strong rule-based analytics present; add anomaly records/review queue and role-scoped views | Medium | anomaly model, review endpoints, dashboards |
-| 10 | Privacy & security | Auth/audit present; add consent, retention, template separation, encryption-at-rest, non-biometric fallback | High | new tables, crypto layer, fallback flow |
-| 11 | Integration & testing | 183 backend + 5 frontend tests; add integration/E2E (Playwright), Ruff, perf instrumentation | High | E2E suite, CI extensions |
-| 12 | Documentation & deployment | README + backend README present; add full `docs/` set, verify deployment instructions | Medium | remaining docs, verified deploy notes |
+1. Define a scanner identity and authentication mechanism; prohibit browsers from asserting liveness, model version, or match score as trusted facts.
+2. Decide whether scanning runs on a managed edge device or on the API host. If edge-based, issue revocable device credentials and scope each device to rooms/classes.
+3. Define a versioned request schema for pseudonymous result, active session, quality, liveness provenance, model version, capture time, and idempotency key.
+4. Preserve raw frames within the chosen scanner boundary and set explicit upload/retention rules.
 
-## 3. Recommended sequencing (dependencies first)
+**Gate:** threat model and API contract reviewed; unauthorized devices/users cannot submit or view data outside their scope.
 
-```
-Phase 1 decisions (roles, framework scope, PAD strategy)
-   ↓
-Phase 2 foundation (roles + academic schema + v1 API aliases)
-   ↓
-Phase 7 decision engine + sessions   ← must precede multi-face/live monitor
-   ↓
-Phase 4 multi-face + tracking  →  Phase 5 quality extension  →  Phase 6 PAD re-evaluation
-   ↓
-Phase 8 offline sync  →  Phase 9 analytics/anomalies  →  Phase 10 privacy/security
-   ↓
-Phase 11 integration tests  →  Phase 12 documentation/deployment
-   ↓
-Phase 3 frontend portals & live monitoring (incremental across all of the above; final consolidation here)
-```
+## Stage 2 — Integrate and evaluate multi-face scanning
 
-The prompt numbers phases 3 before 4, but frontend live monitoring depends on the backend session/decision/Multi-face APIs. Frontend work should therefore proceed incrementally, with a consolidation pass after the backend pipeline exists. **Approval required for this reordering.**
+1. Connect the isolated detector/tracker to a managed camera loop with bounded queues and explicit frame-drop behavior.
+2. Add quality metrics for pose, illumination, minimum face size, and blur; reject unknown or low-quality matches rather than force an identity.
+3. Restrict matching to the active session's authorized roster. Return an uncertain/review outcome when thresholds or data quality do not support a confident decision.
+4. Integrate track outputs with session decisions using device-authenticated submissions, without exposing embeddings to the browser.
+5. Run consented, separated validation and held-out test sets on the actual camera/hardware. Record false match/non-match and review rates.
 
-## 4. Hardware compatibility assessment
+**Gate:** observed latency/FPS, held-out identity evaluation, camera-placement guidance, failure handling, and rollback path. Hardware performance targets are not assumed.
 
-- **Available:** local Windows machine, CPU-only Python venv (`onnxruntime` CPU provider, `insightface` buffalo_l already runs in Docker and locally); Docker Desktop available (had to be started manually). No GPU detected/configured (`FACE_USE_GPU=false`).
-- **CPU viability:** InsightFace SCRFD + ArcFace at `det_size=(640,640)` runs on CPU today (verified via container `/ready` smoke and existing tests). Adding ByteTrack is CPU-friendly (pure numpy/OpenCV). MiniFASNet inference is lightweight on CPU, but a usable model + representative dataset is not present.
-- **Camera:** browser camera via `react-webcam` + MediaPipe; actual multi-face live testing requires a physical webcam, which cannot be verified in this environment — must be validated by the user on supported hardware and reported honestly.
-- **No purchases:** no paid services/hardware will be used without approval.
+## Stage 3 — Liveness and attack evaluation
 
-## 5. Open-source dependency recommendations
+1. Keep server-issued active head-turn challenge as the current liveness method.
+2. Assess passive PAD model licensing, provenance, runtime compatibility, genuine-user behavior, and print/screen/video attack coverage.
+3. Add RGB-IR only after selecting hardware and validating synchronized capture. An RGB-only camera must never emit an infrared verification claim.
+4. Report APCER/BPCER/ACER only from a documented evaluation set; do not claim ISO certification without independent certification/evaluation.
 
-**Reuse (already present):** insightface, onnxruntime, opencv-python, numpy, scipy, SQLAlchemy, Alembic, psycopg2-binary, FastAPI, Pydantic, slowapi, passlib, python-jose, pytest, React Testing Library, MediaPipe Tasks Vision, react-webcam, Recharts.
+**Gate:** approved threat model, reproducible test procedure, versioned model, and measured error rates on target sensors.
 
-**Add only when the corresponding phase starts (with justification):**
-- `bytetrack` (or implement a small IoU/centroid tracker first) — Phase 4.
-- `ruff` — Phase 11 (lint).
-- `@playwright/test` — Phase 11 (E2E).
-- Passive PAD model weights (MiniFASNet / Silent-FAS) — Phase 6, **only after** license + evaluation review; must not be claimed effective without measured results.
-- **Do not add** pgvector (512-d numpy cosine is sufficient at current scale), and **do not migrate** CRA→Vite/JS→TS/MUI→Tailwind unless explicitly approved (see Technical Decisions ADR-001).
+## Stage 4 — Reliable edge event synchronization
 
-## 6. Target database design (additive to existing 10 tables)
+1. Add edge-device enrollment, mTLS-ready credentials, key revocation, heartbeat, and room scope.
+2. Implement `/api/v1/events/batch` with schema validation, signed or authenticated event provenance, UTC timestamps, idempotency keys, row-level result reporting, and transaction-safe writes.
+3. Add a SQLite WAL queue with pending/sent/retry state, bounded backoff, restart recovery, and operator visibility.
+4. Validate clock skew and stale roster policy; avoid trusting a device-supplied timestamp without bounds and provenance.
+5. Simulate 1,000 events during a 30-minute disconnect, repeated submissions, partial failures, process restart, and reconnect. Report actual zero-loss/duplicate results only if observed.
 
-New tables: `roles`/role enum extension on `users`, `students`, `teachers`, `departments`, `courses`, `classes`, `class_enrollments`, `attendance_sessions`, `verification_events`, `offline_sync_events`, `consent_records`, `biometric_templates` (split from PII), `anomaly_flags`.
-Cross-cutting: UUID columns where new tables are introduced, FK constraints, unique constraints (one record per student per session), indexes on date/user/session, created_at/updated_at on new tables, transaction-safe attendance writes. Existing data is preserved via additive Alembic migrations; the daily-unique attendance constraint remains for backward compatibility until sessions are fully adopted.
+**Gate:** integration tests on the actual backend database; deterministic idempotency and recoverable per-event failures.
 
-## 7. UI/UX design plan
+## Stage 5 — Privacy and data lifecycle
 
-Keep the existing design language (Inter, navy `#212E46`, warm neutral backgrounds, orange accents, MUI component styling, framer-motion animations). Introduce a formal design system (tokens for color/spacing/radius/shadow, shared `Card`/`StatCard`/`DataTable`/`EmptyState`/`StatusChip` components), light/dark theme toggle, responsive breakpoints, and consistent loading/error/empty states. New screens: student/teacher/admin portals, live attendance monitor (camera preview, face boxes, tracked IDs, verified/review/spoof queues, counters, manual verification, session controls), class/session management, audit & security, settings. Every control must be wired to a real API action.
+1. Add consent records with purpose, notice version, consent/withdrawal timestamps, and actor/source.
+2. Separate biometric templates from public profile identifiers; generate pseudonymous references and enforce service-level access.
+3. Implement envelope encryption with a supported key provider, key rotation, revocation, and backup implications. Do not expect ordinary pgvector distance search to work on ciphertext.
+4. Define retention schedules and auditable deletion for templates, enrollment images, events, logs, and backups.
+5. Add an equivalent non-biometric check-in path plus user access/deletion workflows.
 
-## 8. Testing strategy
+**Gate:** threat-model review, migration/rollback plan, key-recovery test, deletion verification, and privacy-owner review for the deployment jurisdiction.
 
-- **Backend:** extend Pytest per module (auth/RBAC, academic CRUD, sessions, decision outcomes, multi-face unit tests on recorded frames, quality scorer, liveness, batch idempotency, analytics, anomaly rules). Never fabricate results; record failures.
-- **Frontend:** keep React Testing Library tests; add Playwright for critical flows (login, enrollment, mark, correction, dashboards) and responsive checks once the role portals exist.
-- **Quality:** Ruff for Python; `CI=true npm run build` (ESLint gate) for frontend; TypeScript checks only if the frontend is migrated to TS.
-- **Integration gates:** after each module, run full backend + frontend suites, build, and a live smoke (backend on 8000, frontend on 3000) where possible.
-- **Performance:** instrument detection/tracking/recognition/liveness/total latency, FPS, CPU/RAM, API and DB latency during Phase 11; publish real numbers in `docs/PERFORMANCE_REPORT.md`. No invented figures.
+## Stage 6 — Device and administrative operations
 
-## 9. Estimated implementation complexity (relative, not calendar time)
+1. Add device table, scoped room/class assignments, heartbeat, software/model version, health timestamps, and pending-sync counts.
+2. Collect only metrics devices actually report; mark stale values and offline state honestly.
+3. Build dashboard cards and alerts over the real APIs. Do not seed production cards with fabricated operational metrics.
+4. Add pagination, filtering, exports, and audit history as actual endpoints/actions.
+5. Add WebSocket or server-sent event delivery only if API polling is measured to be inadequate.
 
-| Workstream | Relative size |
-|---|---|
-| Academic schema + 3 roles + v1 API | M |
-| Decision engine + sessions | M |
-| Multi-face detection + tracking + CPU frame selection | L |
-| Quality expansion + verification events | M |
-| Passive PAD with real evaluation | XL / research-heavy |
-| Offline sync queue + retries + tests | M–L |
-| Analytics/anomaly extension | M |
-| Privacy/security (consent, encryption, fallback) | L |
-| Frontend portals + live monitor + design system | XL |
-| Testing/performance/docs/deployment | L |
+## Stage 7 — Evaluation, CI, and production readiness
 
-Total: a large, multi-phase program. The passive PAD and live-camera validation are the highest-uncertainty items and should be explicitly scoped/approved before being promised.
+- Unit tests: detection validation, alignment and normalization, similarity, tracker lifecycle, quality scoring, decision provenance, authorization, event signing, encryption, deletion.
+- Integration tests: camera/scanner adapter, recognition to attendance, PostgreSQL migrations, idempotent batch sync, device heartbeat, overrides, dashboard APIs.
+- Performance report: FPS, detection/tracking/recognition/end-to-end latency, resource use, database latency, queue growth, and active-session cost on named hardware.
+- Evaluation: separate consented train/tune and held-out data. Report FMR/FNMR/FPIR/FNIR/TAR and PAD APCER/BPCER/ACER only where the protocol supports them.
+- Deployment: dependency/model version pinning, vulnerability scanning, health checks, backups, restore drills, secure secrets, and documented rollback.
 
-## 10. Validation gates (each phase)
+## Priority order
 
-1. All existing tests still pass (183 backend / 5 frontend baseline, growing).
-2. New tests written alongside new code and passing.
-3. CI build compiles with zero warnings.
-4. Alembic chain has a single head; migration round-trip verified.
-5. No API/UI regression; no fabricated results in reports.
-6. Docs updated in the same phase; 11-section phase report delivered.
+1. Complete and execute the authorization regression tests.
+2. Establish the trusted scanner/device contract.
+3. Complete camera integration and evaluate multi-face recognition on target hardware.
+4. Deliver consent, encryption, retention, and non-biometric fallback before broader biometric use.
+5. Implement batch/offline sync and device health reporting.
+6. Evaluate PAD/proximity and add only supported hardware integrations.
+7. Complete dashboard, load, performance, deployment, and recovery validation.

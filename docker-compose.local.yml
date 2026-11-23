@@ -1,0 +1,13 @@
+services:
+  backend:
+    ports: !override
+      - "8002:8000"
+    environment:
+      DEBUG: "true"
+      BACKEND_CORS_ORIGINS: http://localhost:3123
+  frontend:
+    build:
+      args:
+        REACT_APP_API_URL: http://localhost:8002
+    ports: !override
+      - "3123:80"

@@ -58,6 +58,8 @@ export const authAPI = {
 // path segments exposed by the backend: departments, academic-sessions,
 // courses, teachers, students, classes.
 export const academicAPI = {
+  organization: () => api.get('/api/v1/organization'),
+  updateOrganization: (data) => api.put('/api/v1/organization', data),
   list: (resource, params = {}) => api.get(`/api/v1/${resource}`, { params }),
   create: (resource, data) => api.post(`/api/v1/${resource}`, data),
   update: (resource, id, data) => api.put(`/api/v1/${resource}/${id}`, data),
@@ -65,6 +67,14 @@ export const academicAPI = {
   listEnrollments: (classId) => api.get(`/api/v1/classes/${classId}/students`),
   enroll: (classId, studentId) => api.post(`/api/v1/classes/${classId}/enrollments`, { student_id: studentId }),
   unenroll: (classId, studentId) => api.delete(`/api/v1/classes/${classId}/enrollments/${studentId}`),
+  previewRoster: (classId, file) => {
+    const data = new FormData();
+    data.append('file', file);
+    return api.post(`/api/v1/classes/${classId}/roster/preview`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  importRoster: (classId, students) => api.post(`/api/v1/classes/${classId}/roster/import`, { students }),
 };
 
 // Liveness APIs
@@ -311,6 +321,9 @@ export const sessionAPI = {
   events: (id, limit = 50) => api.get(`/api/v1/sessions/${id}/events`, { params: { limit } }),
   manual: (id, data) => api.post(`/api/v1/sessions/${id}/manual`, data),
   review: (id, studentId, data) => api.post(`/api/v1/sessions/${id}/review/${studentId}`, data),
+  roster: (id) => api.get(`/api/v1/sessions/${id}/roster`),
+  saveManualAttendance: (id, data) => api.put(`/api/v1/sessions/${id}/manual-attendance`, data),
+  manualReport: (params) => api.get('/api/v1/sessions/reports/manual', { params }),
 };
 
 // Utility function to convert webcam capture to file

@@ -18,6 +18,8 @@ from app.schemas.scheduling import (
 from app.schemas.academic import (
     AcademicSessionCreate,
     AcademicSessionOut,
+    OrganizationSettingsOut,
+    OrganizationSettingsUpdate,
     ClassSectionCreate,
     ClassSectionOut,
     CourseCreate,
@@ -41,6 +43,7 @@ from app.schemas.sessions import (
     ReviewRequestManual,
     SessionCreate,
     SessionOut,
+    ManualAttendanceBatch,
 )
 
 __all__ = [
@@ -61,6 +64,8 @@ __all__ = [
     "DepartmentOut",
     "AcademicSessionCreate",
     "AcademicSessionOut",
+    "OrganizationSettingsOut",
+    "OrganizationSettingsUpdate",
     "CourseCreate",
     "CourseOut",
     "TeacherCreate",
@@ -79,5 +84,6 @@ __all__ = [
     "DecisionOut",
     "ManualOverrideRequest",
     "ReviewRequestManual",
+    "ManualAttendanceBatch",
     "EventOut",
 ]

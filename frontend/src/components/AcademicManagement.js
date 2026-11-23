@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
+  Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControl, FormControlLabel, InputLabel, MenuItem, Select, Snackbar,
   Alert, Tab, Tabs, TextField, Checkbox, Typography, IconButton, Tooltip,
 } from '@mui/material';
@@ -93,6 +93,8 @@ const RESOURCES = {
     fields: [
       { name: 'name', label: 'Name', required: true },
       { name: 'code', label: 'Code', required: true },
+      { name: 'level', label: 'Class / grade' },
+      { name: 'section', label: 'Section' },
       { name: 'course_id', label: 'Course', type: 'select', optionsKey: 'courses' },
       { name: 'teacher_id', label: 'Teacher', type: 'select', optionsKey: 'teachers' },
       { name: 'academic_session_id', label: 'Academic session', type: 'select', optionsKey: 'academic-sessions' },
@@ -100,6 +102,8 @@ const RESOURCES = {
     columns: [
       { key: 'code', label: 'Code' },
       { key: 'name', label: 'Name' },
+      { key: 'level', label: 'Class / grade', render: (r) => r.level || '—' },
+      { key: 'section', label: 'Section', render: (r) => r.section || 'No section' },
       { key: 'student_count', label: 'Students' },
       { key: 'course_id', label: 'Course', render: (r) => r.course_id ?? '—' },
     ],
@@ -123,6 +127,8 @@ const AcademicManagement = () => {
   const [enrollClass, setEnrollClass] = useState(null);
   const [enrolled, setEnrolled] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [organization, setOrganization] = useState({ name: '', sector: 'school', has_sections: true });
+  const [savingOrganization, setSavingOrganization] = useState(false);
 
   const config = RESOURCES[active];
 
@@ -143,6 +149,27 @@ const AcademicManagement = () => {
   }, []);
 
   useEffect(() => { load(active); }, [active, load]);
+
+  useEffect(() => {
+    academicAPI.organization().then((res) => setOrganization(res.data)).catch(() => {});
+  }, []);
+
+  const saveOrganization = async () => {
+    setSavingOrganization(true);
+    try {
+      const res = await academicAPI.updateOrganization(organization);
+      setOrganization(res.data);
+      notify('Organization settings saved');
+    } catch (e) {
+      notify(e.response?.data?.detail || 'Could not save organization settings', 'error');
+    } finally {
+      setSavingOrganization(false);
+    }
+  };
+
+  const levelLabel = organization.sector === 'school' ? 'Class / grade'
+    : organization.sector === 'college' ? 'Program / course group'
+      : organization.sector === 'office' ? 'Department / team' : 'Group';
 
   useEffect(() => {
     let cancelled = false;
@@ -279,9 +306,32 @@ const AcademicManagement = () => {
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <PageHeader
         title="Academic Management"
-        subtitle="Manage departments, courses, people, classes, and enrollments."
+        subtitle="Set up your organization, manage classes or teams, and organize enrollments."
         actions={<Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>Add {config.label.replace(/s$/, '')}</Button>}
       />
+
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Typography variant="h6" fontWeight={700} gutterBottom>Organization setup</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Choose the workspace type to tailor class and group labels for attendance.
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' }, gap: 1.5, alignItems: 'center' }}>
+            <TextField label="Organization name" value={organization.name || ''} onChange={(e) => setOrganization((o) => ({ ...o, name: e.target.value }))} />
+            <FormControl fullWidth>
+              <InputLabel>Workspace type</InputLabel>
+              <Select label="Workspace type" value={organization.sector || 'other'} onChange={(e) => setOrganization((o) => ({ ...o, sector: e.target.value }))}>
+                <MenuItem value="school">School</MenuItem>
+                <MenuItem value="college">College / university</MenuItem>
+                <MenuItem value="office">Office / workplace</MenuItem>
+                <MenuItem value="other">Other organization</MenuItem>
+              </Select>
+            </FormControl>
+            <Button variant="contained" onClick={saveOrganization} disabled={savingOrganization}>{savingOrganization ? 'Saving…' : 'Save setup'}</Button>
+            <FormControlLabel sx={{ gridColumn: { sm: '1 / -1' } }} control={<Checkbox checked={organization.has_sections !== false} onChange={(e) => setOrganization((o) => ({ ...o, has_sections: e.target.checked }))} />} label="This organization uses sections (for example, 10-A or Biology-A)" />
+          </Box>
+        </CardContent>
+      </Card>
 
       <Tabs value={active} onChange={(_, v) => setActive(v)} variant="scrollable" scrollButtons="auto"
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -311,7 +361,8 @@ const AcademicManagement = () => {
         <DialogTitle fontWeight="700">{editing ? `Edit ${config.label.replace(/s$/, '')}` : `New ${config.label.replace(/s$/, '')}`}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, pt: 1 }}>
-            {config.fields.map(renderField)}
+            {config.fields.filter((f) => !(active === 'classes' && f.name === 'section' && organization.has_sections === false))
+              .map((f) => f.name === 'level' ? renderField({ ...f, label: levelLabel }) : renderField(f))}
           </Box>
           {editing && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>

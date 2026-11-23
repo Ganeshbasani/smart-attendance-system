@@ -8,7 +8,9 @@ with students restricted to their own profile and enrolled classes.
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from pydantic import ValidationError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -17,6 +19,7 @@ from app.core.time_utils import now_local
 from app.db.session import get_db
 from app.models import (
     AcademicSession,
+    OrganizationSettings,
     ClassEnrollment,
     ClassSection,
     Course,
@@ -25,9 +28,13 @@ from app.models import (
     Teacher,
     User,
 )
+from app.schemas.roster import RosterImportBatch, RosterImportItem
+from app.services.roster_import import parse_roster
 from app.schemas import (
     AcademicSessionCreate,
     AcademicSessionOut,
+    OrganizationSettingsOut,
+    OrganizationSettingsUpdate,
     ClassSectionCreate,
     ClassSectionOut,
     CourseCreate,
@@ -83,18 +90,63 @@ def _teacher_out(t: Teacher) -> TeacherOut:
     )
 
 
+def _require_class_manager(db: Session, class_id: int, user: User) -> ClassSection:
+    section = _get_or_404(db, ClassSection, class_id, "Class")
+    if user.role == "admin":
+        return section
+    teacher = db.query(Teacher).filter(Teacher.user_id == user.id).first()
+    if user.role != "teacher" or teacher is None or section.teacher_id != teacher.id:
+        raise HTTPException(status_code=403, detail="You cannot manage this class roster")
+    return section
+
+
 def _class_out(db: Session, c: ClassSection) -> ClassSectionOut:
     count = db.query(ClassEnrollment).filter(
         ClassEnrollment.class_section_id == c.id
     ).count()
     return ClassSectionOut(
-        id=c.id, name=c.name, code=c.code, course_id=c.course_id,
+        id=c.id, name=c.name, code=c.code, level=c.level, section=c.section,
+        course_id=c.course_id,
         teacher_id=c.teacher_id, academic_session_id=c.academic_session_id,
         student_count=count, created_at=c.created_at,
     )
 
 
 # ── departments ───────────────────────────────────────────────────────────────
+
+@router.get("/organization", response_model=OrganizationSettingsOut)
+async def get_organization_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    settings_row = db.query(OrganizationSettings).filter(OrganizationSettings.id == 1).first()
+    if settings_row is None:
+        settings_row = OrganizationSettings(id=1, name="My Organization", sector="other", has_sections=True)
+        db.add(settings_row)
+        db.commit()
+        db.refresh(settings_row)
+    return settings_row
+
+
+@router.put("/organization", response_model=OrganizationSettingsOut)
+async def update_organization_settings(
+    payload: OrganizationSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user),
+):
+    settings_row = db.query(OrganizationSettings).filter(OrganizationSettings.id == 1).first()
+    if settings_row is None:
+        settings_row = OrganizationSettings(id=1)
+        db.add(settings_row)
+    settings_row.name = payload.name.strip()
+    settings_row.sector = payload.sector
+    settings_row.has_sections = payload.has_sections
+    db.commit()
+    db.refresh(settings_row)
+    audit_record(db, action="organization.settings.update", actor=current_user,
+                 entity_type="organization", entity_id="1",
+                 details={"sector": settings_row.sector, "has_sections": settings_row.has_sections})
+    return settings_row
 
 @router.get("/departments", response_model=list[DepartmentOut])
 async def list_departments(
@@ -515,7 +567,12 @@ async def list_classes(
     current_user: User = Depends(deps.get_current_user),
 ):
     query = db.query(ClassSection)
-    if current_user.role not in ("admin", "teacher"):
+    if current_user.role == "teacher":
+        teacher = db.query(Teacher).filter(Teacher.user_id == current_user.id).first()
+        if teacher is None:
+            return []
+        query = query.filter(ClassSection.teacher_id == teacher.id)
+    elif current_user.role != "admin":
         # Students see only classes they are enrolled in.
         query = query.join(ClassEnrollment).join(Student).filter(Student.user_id == current_user.id)
     classes = query.order_by(ClassSection.code).offset(skip).limit(limit).all()
@@ -533,8 +590,11 @@ async def create_class(
     _check_fk(db, Course, payload.course_id, "Course")
     _check_fk(db, Teacher, payload.teacher_id, "Teacher")
     _check_fk(db, AcademicSession, payload.academic_session_id, "Academic session")
+    org = db.query(OrganizationSettings).filter(OrganizationSettings.id == 1).first()
     section = ClassSection(
-        name=payload.name, code=payload.code, course_id=payload.course_id,
+        name=payload.name, code=payload.code, level=payload.level,
+        section=payload.section if org is None or org.has_sections else None,
+        course_id=payload.course_id,
         teacher_id=payload.teacher_id, academic_session_id=payload.academic_session_id,
     )
     db.add(section)
@@ -576,8 +636,11 @@ async def update_class(
     _check_fk(db, Course, payload.course_id, "Course")
     _check_fk(db, Teacher, payload.teacher_id, "Teacher")
     _check_fk(db, AcademicSession, payload.academic_session_id, "Academic session")
+    org = db.query(OrganizationSettings).filter(OrganizationSettings.id == 1).first()
     section.name = payload.name
     section.code = payload.code
+    section.level = payload.level
+    section.section = payload.section if org is None or org.has_sections else None
     section.course_id = payload.course_id
     section.teacher_id = payload.teacher_id
     section.academic_session_id = payload.academic_session_id
@@ -609,9 +672,14 @@ async def list_class_students(
     current_user: User = Depends(deps.get_current_user),
 ):
     _get_or_404(db, ClassSection, class_id, "Class")
-    rows = db.query(ClassEnrollment).join(Student).join(User).filter(
+    query = db.query(ClassEnrollment).join(Student).join(User).filter(
         ClassEnrollment.class_section_id == class_id
-    ).all()
+    )
+    if current_user.role == "teacher":
+        _require_class_manager(db, class_id, current_user)
+    elif current_user.role != "admin":
+        query = query.filter(Student.user_id == current_user.id)
+    rows = query.all()
     return [
         EnrollmentOut(
             id=r.id, class_section_id=r.class_section_id, student_id=r.student_id,
@@ -622,13 +690,143 @@ async def list_class_students(
     ]
 
 
+@router.post("/classes/{class_id}/roster/preview")
+async def preview_class_roster(
+    class_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.require_staff),
+):
+    """Extract a roster for review without storing the uploaded document."""
+    _require_class_manager(db, class_id, current_user)
+    filename = file.filename or ""
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Roster file exceeds the 10 MB limit")
+    try:
+        extracted = parse_roster(filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    seen_emails, seen_rolls = set(), set()
+    rows = []
+    for row in extracted:
+        errors = []
+        try:
+            item = RosterImportItem.model_validate({k: v for k, v in row.items() if not k.startswith("_")})
+            email, roll = str(item.email).lower(), item.roll_number.strip()
+        except ValidationError as exc:
+            item = None
+            email = str(row.get("email", "")).lower()
+            roll = str(row.get("roll_number", "")).strip()
+            errors.extend(error["msg"] for error in exc.errors())
+
+        existing = None
+        if item:
+            if email in seen_emails or roll.lower() in seen_rolls:
+                errors.append("Duplicate email or student ID in this file")
+            seen_emails.add(email)
+            seen_rolls.add(roll.lower())
+            existing_user = db.query(User).filter(func.lower(User.email) == email).first()
+            existing_roll = db.query(Student).filter(func.lower(Student.roll_number) == roll.lower()).first()
+            if existing_user:
+                existing = db.query(Student).filter(Student.user_id == existing_user.id).first()
+                if (existing is None or existing.roll_number.lower() != roll.lower()
+                        or existing_user.role not in ("student", "user")):
+                    errors.append("Email already belongs to a different account")
+            elif existing_roll:
+                errors.append("Student ID already belongs to another account")
+
+        rows.append({
+            "line": row.get("_line"), "full_name": row.get("full_name", ""),
+            "roll_number": row.get("roll_number", ""), "email": row.get("email", ""),
+            "phone_number": row.get("phone_number", ""),
+            "already_in_system": bool(existing), "errors": errors,
+        })
+    return {"filename": filename, "count": len(rows), "valid_count": sum(not r["errors"] for r in rows), "rows": rows}
+
+
+@router.post("/classes/{class_id}/roster/import")
+async def import_class_roster(
+    class_id: int,
+    payload: RosterImportBatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.require_staff),
+):
+    """Create or enroll reviewed student rows into a managed class."""
+    section = _require_class_manager(db, class_id, current_user)
+    emails, rolls = set(), set()
+    for item in payload.students:
+        email, roll = str(item.email).lower(), item.roll_number.strip().lower()
+        if email in emails or roll in rolls:
+            raise HTTPException(status_code=422, detail="Duplicate email or student ID in import")
+        emails.add(email); rolls.add(roll)
+
+    created_count, enrolled_count, existing_count = 0, 0, 0
+    try:
+        for item in payload.students:
+            email = str(item.email).lower()
+            roll = item.roll_number.strip()
+            user = db.query(User).filter(func.lower(User.email) == email).first()
+            student = db.query(Student).filter(func.lower(Student.roll_number) == roll.lower()).first()
+            if user:
+                if user.role not in ("student", "user"):
+                    raise HTTPException(status_code=409, detail=f"Email {email} belongs to a non-student account")
+                if student is None or student.user_id != user.id:
+                    raise HTTPException(status_code=409, detail=f"Email {email} and student ID {roll} do not match")
+            elif student:
+                raise HTTPException(status_code=409, detail=f"Student ID {roll} already belongs to another email")
+            else:
+                department_id = section.course.department_id if section.course else None
+                user = User(
+                    email=email, password=get_password_hash(secrets.token_urlsafe(32)),
+                    full_name=item.full_name.strip(), unique_id=_unique_id("IMP"),
+                    phone_number=item.phone_number, role="student", is_active=False,
+                )
+                db.add(user)
+                db.flush()
+                student = Student(
+                    user_id=user.id, roll_number=roll,
+                    department_id=department_id,
+                    academic_session_id=section.academic_session_id,
+                )
+                db.add(student)
+                db.flush()
+                created_count += 1
+            if db.query(ClassEnrollment.id).filter(
+                ClassEnrollment.class_section_id == class_id,
+                ClassEnrollment.student_id == student.id,
+            ).first():
+                existing_count += 1
+            else:
+                db.add(ClassEnrollment(class_section_id=class_id, student_id=student.id))
+                enrolled_count += 1
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+    audit_record(db, action="academic.class.roster_import", actor=current_user,
+                 entity_type="class", entity_id=str(class_id),
+                 details={"created": created_count, "enrolled": enrolled_count, "already_enrolled": existing_count})
+    return {
+        "created_students": created_count,
+        "enrolled_students": enrolled_count,
+        "already_enrolled": existing_count,
+        "accounts_require_admin_setup": created_count > 0,
+    }
+
+
 @router.post("/classes/{class_id}/enrollments", response_model=EnrollmentOut, status_code=201)
 async def enroll_student(
     class_id: int, payload: EnrollRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_admin_user),
+    current_user: User = Depends(deps.require_staff),
 ):
-    _get_or_404(db, ClassSection, class_id, "Class")
+    _require_class_manager(db, class_id, current_user)
     student = _get_or_404(db, Student, payload.student_id, "Student")
     if db.query(ClassEnrollment).filter(
         ClassEnrollment.class_section_id == class_id,
@@ -655,7 +853,7 @@ async def unenroll_student(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
-    _get_or_404(db, ClassSection, class_id, "Class")
+    _require_class_manager(db, class_id, current_user)
     enrollment = db.query(ClassEnrollment).filter(
         ClassEnrollment.class_section_id == class_id,
         ClassEnrollment.student_id == student_id,

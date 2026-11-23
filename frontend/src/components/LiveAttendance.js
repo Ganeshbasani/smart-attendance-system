@@ -17,26 +17,21 @@ const DECISIONS = ['VERIFIED', 'REVIEW_REQUIRED', 'REJECTED', 'DUPLICATE', 'MANU
 /**
  * Live attendance monitor (AttendX Module 5 + 10).
  *
- * Real, wired behaviour: session create/start/stop; verification submission
- * using the CV signals produced by a scanner; polling of decisions + events;
- * reasoned review and manual override. The camera preview is live, but
- * automatic multi-face detection/tracking is a later phase — we do not fake it.
+ * Real, wired behaviour: session create/start/stop; polling of decisions and
+ * events; reasoned review and manual override. The camera preview is view-only:
+ * this screen has no connected scanner and must not accept fabricated CV scores.
  */
 const LiveAttendance = () => {
   const [sessions, setSessions] = useState([]);
   const [selected, setSelected] = useState(null);
   const [records, setRecords] = useState([]);
   const [events, setEvents] = useState([]);
-  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
   const [createOpen, setCreateOpen] = useState(false);
   const [newSession, setNewSession] = useState({ name: '', class_section_id: '' });
   const [classes, setClasses] = useState([]);
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const [verify, setVerify] = useState({ user_id: '', confidence: 90, quality_score: 90,
-    liveness_ok: true, spoof_suspected: false, model_version: 'buffalo_l' });
   const [reviewDialog, setReviewDialog] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [cameraOn, setCameraOn] = useState(false);
@@ -59,8 +54,7 @@ const LiveAttendance = () => {
     }
   }, []);
 
-  useEffect(() => { loadSessions(); academicAPI.list('classes').then((r) => setClasses(r.data || [])).catch(() => {});
-    academicAPI.list('students').then((r) => setStudents(r.data || [])).catch(() => {}); }, [loadSessions]);
+  useEffect(() => { loadSessions(); academicAPI.list('classes').then((r) => setClasses(r.data || [])).catch(() => {}); }, [loadSessions]);
 
   // Poll the selected session's live feed while it is active.
   useEffect(() => {
@@ -102,27 +96,6 @@ const LiveAttendance = () => {
       setSelected(res.data);
     } catch (e) {
       notify(e.response?.data?.detail || 'Could not create session', 'error');
-    }
-  };
-
-  const submitVerification = async () => {
-    try {
-      await sessionAPI.submitDecision(selected.id, {
-        user_id: Number(verify.user_id),
-        confidence: Number(verify.confidence),
-        quality_score: Number(verify.quality_score),
-        liveness_ok: verify.liveness_ok,
-        spoof_suspected: verify.spoof_suspected,
-        model_version: verify.model_version,
-      });
-      setVerifyOpen(false);
-      notify('Verification submitted and decision recorded');
-      const [rec, ev] = await Promise.all([
-        sessionAPI.records(selected.id), sessionAPI.events(selected.id, 30),
-      ]);
-      setRecords(rec.data || []); setEvents(ev.data || []);
-    } catch (e) {
-      notify(e.response?.data?.detail || 'Could not submit verification', 'error');
     }
   };
 
@@ -196,9 +169,6 @@ const LiveAttendance = () => {
                   {selected.status === 'active' && (
                     <Button variant="contained" color="error" startIcon={<StopIcon />} onClick={() => changeStatus('stop')}>Stop</Button>
                   )}
-                  {selected.status === 'active' && (
-                    <Button variant="outlined" onClick={() => setVerifyOpen(true)}>Record verification</Button>
-                  )}
                 </Box>
               </CardContent>
             </Card>
@@ -223,14 +193,18 @@ const LiveAttendance = () => {
                 <Typography variant="h6" fontWeight="700">Camera preview</Typography>
                 <FormControlLabel control={<Switch checked={cameraOn} onChange={(e) => setCameraOn(e.target.checked)} />} label="Camera" />
               </Box>
+              <Alert severity="info" sx={{ mb: 1 }}>
+                This is a view-only preview. No scanner is connected, so this screen cannot produce
+                recognition or liveness decisions. Use the existing check-in flow or record a reasoned
+                staff override when needed.
+              </Alert>
               {cameraOn ? (
                 <Webcam ref={webcamRef} audio={false} mirrored
                   screenshotFormat="image/jpeg" videoConstraints={{ facingMode: 'user' }}
                   style={{ width: '100%', maxHeight: 360, borderRadius: 12, background: '#000' }} />
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Enable the camera to preview the room. Automatic multi-face detection and tracking are
-                  planned for a later phase; verification here uses scanner-produced signals.
+                  Turn on the camera to preview the room. No frames are processed by this monitor.
                 </Typography>
               )}
             </CardContent>
@@ -288,33 +262,6 @@ const LiveAttendance = () => {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={createSession} disabled={!newSession.name}>Create</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Verification signals */}
-      <Dialog open={verifyOpen} onClose={() => setVerifyOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight="700">Record verification</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Enter the signals produced by the scanner. The decision engine applies the policy
-            (thresholds are configured server-side).
-          </Typography>
-          <FormControl fullWidth margin="dense">
-            <InputLabel>Student</InputLabel>
-            <Select label="Student" value={verify.user_id} onChange={(e) => setVerify((p) => ({ ...p, user_id: e.target.value }))}>
-              {students.map((s) => <MenuItem key={s.user_id} value={s.user_id}>{s.roll_number} — {s.full_name}</MenuItem>)}
-            </Select>
-          </FormControl>
-          <TextField label="Recognition confidence (0-100)" type="number" fullWidth margin="dense"
-            value={verify.confidence} onChange={(e) => setVerify((p) => ({ ...p, confidence: e.target.value }))} />
-          <TextField label="Image quality (0-100)" type="number" fullWidth margin="dense"
-            value={verify.quality_score} onChange={(e) => setVerify((p) => ({ ...p, quality_score: e.target.value }))} />
-          <FormControlLabel control={<Switch checked={verify.liveness_ok} onChange={(e) => setVerify((p) => ({ ...p, liveness_ok: e.target.checked }))} />} label="Liveness confirmed" />
-          <FormControlLabel control={<Switch checked={verify.spoof_suspected} onChange={(e) => setVerify((p) => ({ ...p, spoof_suspected: e.target.checked }))} />} label="Spoof suspected" />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setVerifyOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={submitVerification} disabled={!verify.user_id}>Submit</Button>
         </DialogActions>
       </Dialog>
 

@@ -29,6 +29,7 @@ Pillow>=10.0.0
 numpy>=1.26.0
 scipy>=1.11.0
 scikit-image>=0.22.0
+pypdf>=5.0,<7.0
 
 # ===== Security / rate limiting =====
 slowapi>=0.1.9

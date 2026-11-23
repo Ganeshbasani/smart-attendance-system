@@ -1,130 +1,82 @@
-# AttendX — Current Architecture (as audited 2026-11-20)
+# Current Architecture
 
-This document describes the system **as it exists at audit time**, not the target design.
+**Status date:** 2026-11-22. This describes the implemented application and clearly marks the new scanner module that is not yet wired to attendance.
 
-## 1. Repository layout
+## System shape
 
-```
-smart-attendance-system/
-├── .github/workflows/ci.yml       # backend tests + alembic head check + frontend tests + CI build
-├── .env.example                   # root compose substitution template
-├── docker-compose.yml             # postgres + backend + nginx frontend
-├── README.md                      # product/overview/deployment documentation
-├── backend/
-│   ├── Dockerfile                 # python:3.11-slim, model pre-download, non-root appuser
-│   ├── README.md                  # env vars, notifications, analytics, face tuning
-│   ├── requirements.txt
-│   ├── alembic.ini + alembic/versions/   # 6 migrations, single head d4e5f6a7b8c9
-│   ├── scripts/                   # benchmark_thresholds, calibrate_direction, migrate_faces_to_db
-│   ├── tests/                     # 18 test modules (183 tests)
-│   └── app/
-│       ├── main.py                # app factory, lifespan, middleware, /health, /ready
-│       ├── core/                  # config, security, limiter, logging, request_context, uploads, time_utils
-│       ├── db/                    # session (run_migrations), base
-│       ├── models/                # user, attendance, face, audit, notifications, scheduling
-│       ├── schemas/               # user, attendance, scheduling
-│       ├── services/              # face_recognition, liveness, analytics, audit, notifications, scheduling
-│       └── api/                   # deps.py + routers/ (auth, users, attendance, face, admin,
-│                                  #   admin_scheduling, user_scheduling, analytics, notifications, liveness)
-└── frontend/
-    ├── Dockerfile                 # node:18-alpine build -> nginx:alpine
-    ├── nginx.conf                 # SPA fallback, immutable /static/, no-cache index.html, security headers
-    ├── vercel.json                # SPA rewrites
-    ├── public/                    # index.html (Inter + Roboto fonts), favicon, manifest
-    └── src/
-        ├── index.js               # theme (MUI), BrowserRouter, CssBaseline; ErrorBoundary inside App
-        ├── App.js                 # AuthContext, routes, nav layout
-        ├── services/api.js        # axios instance, JWT interceptor, API_BASE_URL from REACT_APP_API_URL
-        └── components/            # 18 components (Home, Login, Register, FaceCapture, FaceCamera,
-                                   #   MarkAttendance, dashboards, profile, attendance, analytics, etc.)
+```mermaid
+flowchart TD
+  FE[React 18 browser app] -->|HTTPS + JWT| API[FastAPI]
+  FE -->|camera capture for current kiosk| CV[InsightFace recognition + active challenge]
+  API --> DEC[Session decision service]
+  CV --> DEC
+  DEC --> DB[(PostgreSQL / SQLite)]
+  API --> AUD[Audit and analytics services]
+  DB --> UI[Admin, teacher, student and live-monitor screens]
+  EDGE[New isolated multi-face scanner module] -. not connected yet .-> DEC
 ```
 
-## 2. Layer diagram
+## Frontend
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ Browser                                                      │
-│  React 18 + MUI 5 · react-router · Recharts · framer-motion   │
-│  react-webcam · MediaPipe FaceLandmarker (blink challenge)    │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ HTTPS/HTTP · axios · JSON · Bearer JWT
-┌───────────────────────────▼──────────────────────────────────┐
-│ FastAPI (app/main.py)                                        │
-│  CORS · security headers · X-Request-ID · slowapi · audit log │
-│  lifespan: validate_security -> mkdirs -> run_migrations()    │
-├──────────────────────────────────────────────────────────────┤
-│ Routers (unversioned paths)                                  │
-│  /auth /users /attendance /face /admin /analytics             │
-│  /liveness /notifications /shifts /holidays /leave-requests   │
-├──────────────────────────────────────────────────────────────┤
-│ Services                                                     │
-│  FaceRecognitionService (InsightFace, cosine+kNN)             │
-│  LivenessService (server-issued head-turn challenge)          │
-│  AnalyticsService (shift/leave/holiday aware)                 │
-│  AuditService · NotificationService · SchedulingService       │
-├──────────────────────────────────────────────────────────────┤
-│ SQLAlchemy 2 models + Alembic migrations                      │
-│  users · attendance · face_embeddings · face_images           │
-│  audit_logs · notifications · shifts · holidays               │
-│  leave_requests · attendance_correction_requests              │
-└───────────────────────────┬──────────────────────────────────┘
-                            │ PostgreSQL (prod, Neon) / SQLite (local default)
-```
+- React 18 JavaScript, MUI 5, CRA/Craco, React Router, Axios, Recharts, and Framer Motion.
+- Browser camera components and MediaPipe guidance support the existing check-in flow.
+- Role-based screens exist for admin, teacher, and student, alongside academic CRUD, session management, live monitor, settings, analytics, and audit views.
+- API calls use an Axios bearer-token interceptor. The live session monitor polls; it does not currently receive WebSocket events.
 
-## 3. Data model (existing tables)
+## Backend and API
 
-| Table | Purpose | Key constraints |
-|---|---|---|
-| `users` | identity + `role` (`admin` / `user`) + shift assignment | unique email |
-| `attendance` | per-user daily mark, in/out, punctuality flag | **unique (user_id, date)** |
-| `face_embeddings` | 512-d ArcFace vectors, one row per enrollment image | FK user, model version |
-| `face_images` | enrollment image bytes in DB | FK user |
-| `audit_logs` | actor, action, target, timestamp, metadata | indexed |
-| `notifications` | user-scoped, read state, event type | FK user |
-| `shifts` / `holidays` | scheduling context | — |
-| `leave_requests` / `attendance_correction_requests` | approval workflows with reasons | FK user |
+- FastAPI app factory in `backend/app/main.py`, Pydantic schemas, SQLAlchemy 2, and Alembic.
+- Legacy routers are mounted under their current paths and additively under `/api/v1`; academic and session routers declare versioned paths directly.
+- Route handlers are declared async, while database work uses synchronous SQLAlchemy sessions.
+- Middleware provides CORS, request correlation, security headers, and rate limiting. Central exception handling avoids returning SQL/internal exception details.
+- Auth dependencies validate bearer tokens and active accounts; staff/student dependencies gate roles.
+- Session routes now restrict score-based decision submission to staff who manage the session, require enrollment for class-linked targets, scope session reads, limit student record reads to the caller, and restrict event feeds to session managers. The browser monitor no longer submits editable CV signals.
 
-## 4. Key request flows
+## Recognition and liveness
 
-**Enrollment:** browser captures N faces (MediaPipe-driven guidance) → `POST /face/register/{user_id}` → server quality-checks each frame, extracts 512-d embeddings, stores embeddings + image bytes in DB (no disk files). Admin enrollment currently bypasses the active liveness challenge.
+### Current kiosk path
 
-**Mark attendance:** client runs MediaPipe blink/liveness heuristics and captures frames → `POST /attendance/mark` with files, client liveness flag, anti-replay frame difference → server-side active liveness challenge (head-turn yaw sweep) → face recognition against DB gallery → quality/confidence gates → creates/updates one `attendance` row for the day.
+Browser captures image frames → FastAPI upload/validation → InsightFace SCRFD detector and ArcFace recognition → image quality checks and cosine/k-NN gallery match → server-issued head-turn challenge where required → attendance/session decision.
 
-**Analytics:** routers call `AnalyticsService`, which prefers the stored `is_late` flag (shift-aware), excludes approved leave and holidays from expected-people denominators, and computes daily/weekly trends and department totals. CSV export uses `csv.writer`.
+- Existing recognition uses InsightFace and a configured model pack (`buffalo_l` by default), with normalized embeddings stored in the database and a process-local NumPy matching cache.
+- The recognizer chooses the largest face for the single-user flow; it is not a multi-person tracker.
+- Existing quality checks cover face size, detection confidence, blur, and brightness heuristics. These scores are not calibrated error rates.
+- Browser blink guidance is not accepted as proof by itself. Passive PAD is not deployed; a prior candidate behaved poorly on genuine enrollment imagery.
 
-## 5. AI/ML pipeline (current)
+### New isolated scanner service
 
-```
-camera frames (browser)
-  -> MediaPipe FaceLandmarker (blink guidance, client side)
-  -> uploaded JPEG frames
-  -> InsightFace SCRFD detector + ArcFace w600k_r50 (512-d, normalized)
-  -> largest face only, per frame
-  -> OpenCV quality (blur variance, min face size, detection score)
-  -> active liveness: server-issued random left/right head-turn challenge,
-     re-detect frames, measure yaw sweep + sign (single-use, in-memory, TTL 90s)
-  -> cosine similarity vs all per-user embeddings, k-NN voting, threshold
-  -> attendance decision in router
-```
+`backend/app/services/multiface.py` provides:
 
-There is **no** multi-face tracker, no passive PAD/MiniFASNet, no per-frame quality scoring for pose/brightness/occlusion, and no WebSocket stream.
+- SCRFD detector-only inference through InsightFace, returning boxes, five landmarks, detector scores, and simple capture-quality features.
+- `ByteTrackTracker`: Kalman prediction, high-confidence association followed by low-confidence recovery, high-confidence-only track birth, confirmation, and expiry.
+- Ephemeral sequential track IDs; IDs are process-local and are not identities.
+- ArcFace 112×112 five-landmark alignment and L2-normalized embedding on a confirmed track's improved quality frame only.
+- Cosine similarity and vector normalization helpers.
 
-## 6. Configuration surface
+This module has no camera capture, persistent tracker, room gallery, authorization/session integration, or production API route. It must not be advertised as an end-to-end live feature until those integrations and physical-camera evaluation are complete.
 
-`backend/app/core/config.py` (Pydantic Settings, env-driven): `DEBUG`, `SECRET_KEY`, `DATABASE_URL`, `BACKEND_CORS_ORIGINS`, rate limits, `FACE_MODEL_PACK` (buffalo_l), `FACE_USE_GPU` (default false), `FACE_MATCH_THRESHOLD` (0.42), `FACE_DUPLICATE_THRESHOLD` (0.50), `FACE_KNN_K` (5), quality thresholds, liveness challenge/geometry settings, attendance anti-replay settings, audit/notification/ SMTP options. Production (`DEBUG=false`) refuses weak `SECRET_KEY` at startup.
+## Database
 
-## 7. Deployment topology
+Core tables include users, daily attendance, face embeddings/images, audit logs, notifications, shifts, holidays, leave/correction requests, departments, academic sessions, courses, teachers, students, classes, class enrollments, attendance sessions, session attendance, and verification events. See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for migration details.
 
-- **Frontend:** static build on Vercel with SPA rewrites (`vercel.json`), or nginx container from `frontend/Dockerfile`.
-- **Backend:** Render (per README) or `backend/Dockerfile` image; `$PORT` respected; `/ready` healthcheck; migrations run at startup.
-- **DB:** Neon PostgreSQL in production; SQLite default for local dev.
-- **CI:** pushes to `main` and `upgrade/production-hardening`; PRs to `main`.
-- **Local:** `docker compose up --build` with root `.env` (see `.env.example`) exposes frontend :3000 and API :8000.
+- PostgreSQL is the production target; SQLite supports local development and tests.
+- Legacy daily uniqueness `(user_id, date)` remains. Session uniqueness `(session_id, user_id)` guards one session record per student.
+- No pgvector, edge-device registry, signed sync-event, consent, or dedicated encrypted-template schema currently exists.
+- Face embeddings and captured enrollment image bytes are database-backed but not application-layer encrypted.
 
-## 8. Known architectural constraints
+## Deployment and operations
 
-- Per-process in-memory rate limiter and liveness challenge store (break with multiple workers).
-- Single-face pipeline; identity is locked to the authenticated user at mark time.
-- Raw biometric embeddings/images stored in DB (no encryption-at-rest or consent records).
-- Unversioned API paths; no pagination on several list endpoints.
-- Frontend env is build-time (`REACT_APP_API_URL`), so changing the API target requires a rebuild.
+- `docker-compose.yml`: PostgreSQL, FastAPI backend, and nginx-served frontend.
+- Dockerfiles support independent frontend/backend builds.
+- Repository README documents Vercel, Render, and Neon deployment.
+- `/health` checks process liveness; `/ready` checks database connectivity.
+- CI runs backend tests/migration-head checks and frontend tests/build. Actual deployment health was not verified in this audit.
+- Rate-limit and challenge stores are process-local; multi-replica consistency requires shared storage.
+
+## Known constraints
+
+1. No physical camera or GPU evaluation for the new scanner.
+2. Client-provided decision signals are not trusted proof of identity/liveness; a server-owned recognition flow or authenticated edge-device attestation is needed before automated session acceptance relies on them.
+3. Biometric consent, application encryption, retention, deletion, and non-biometric self-service fallback remain incomplete.
+4. No offline edge queue, event batch API, device authentication/heartbeat, proximity verification, or WebSocket feed.
+5. API paths are only partially versioned; handlers use sync SQLAlchemy sessions inside async functions.

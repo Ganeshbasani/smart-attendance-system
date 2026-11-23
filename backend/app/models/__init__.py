@@ -11,6 +11,7 @@ from app.models.scheduling import (
 )
 from app.models.academic import (
     AcademicSession,
+    OrganizationSettings,
     ClassEnrollment,
     ClassSection,
     Course,
@@ -33,6 +34,7 @@ __all__ = [
     "AttendanceCorrectionRequest",
     "Department",
     "AcademicSession",
+    "OrganizationSettings",
     "Course",
     "Teacher",
     "Student",

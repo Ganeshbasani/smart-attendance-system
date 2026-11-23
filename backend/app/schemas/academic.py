@@ -19,6 +19,18 @@ class DepartmentOut(BaseModel):
     created_at: datetime
 
 
+class OrganizationSettingsUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    sector: str = Field(pattern="^(school|college|office|other)$")
+    has_sections: bool = True
+
+
+class OrganizationSettingsOut(OrganizationSettingsUpdate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime
+
+
 class AcademicSessionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     start_date: date
@@ -116,6 +128,8 @@ class StudentUpdate(BaseModel):
 class ClassSectionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     code: str = Field(min_length=1, max_length=32)
+    level: Optional[str] = Field(default=None, max_length=120)
+    section: Optional[str] = Field(default=None, max_length=64)
     course_id: Optional[int] = None
     teacher_id: Optional[int] = None
     academic_session_id: Optional[int] = None
@@ -126,6 +140,8 @@ class ClassSectionOut(BaseModel):
     id: int
     name: str
     code: str
+    level: Optional[str] = None
+    section: Optional[str] = None
     course_id: Optional[int] = None
     teacher_id: Optional[int] = None
     academic_session_id: Optional[int] = None

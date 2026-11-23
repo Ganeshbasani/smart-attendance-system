@@ -208,3 +208,44 @@ async def test_pagination_and_audit_log(client, admin_token):
     rows = body if isinstance(body, list) else body.get("logs", [])
     actions = [row["action"] for row in rows]
     assert "academic.department.create" in actions
+
+
+@pytest.mark.asyncio
+async def test_teacher_can_preview_and_import_csv_roster_for_owned_class(client, admin_token):
+    h = auth(admin_token)
+    teacher = await client.post("/api/v1/teachers", headers=h, json={
+        "email": "roster-teacher@test.com", "password": "TeacherPass1!",
+        "full_name": "Roster Teacher", "employee_id": "ROSTER-T1",
+    })
+    assert teacher.status_code == 201, teacher.text
+    teacher_id = teacher.json()["id"]
+    klass = await client.post("/api/v1/classes", headers=h, json={
+        "name": "Roster Import Class", "code": "ROSTER-IMPORT", "teacher_id": teacher_id,
+    })
+    assert klass.status_code == 201, klass.text
+    class_id = klass.json()["id"]
+    teacher_token = await login_user(client, "roster-teacher@test.com", "TeacherPass1!")
+    th = auth(teacher_token)
+
+    preview = await client.post(
+        f"/api/v1/classes/{class_id}/roster/preview", headers=th,
+        files={"file": ("roster.csv", b"Student ID,Full Name,Email\nR-101,Alex Student,alex101@example.edu\n", "text/csv")},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["valid_count"] == 1
+    row = preview.json()["rows"][0]
+
+    imported = await client.post(f"/api/v1/classes/{class_id}/roster/import", headers=th, json={
+        "students": [{
+            "full_name": row["full_name"], "roll_number": row["roll_number"],
+            "email": row["email"],
+        }],
+    })
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["created_students"] == 1
+    assert imported.json()["enrolled_students"] == 1
+    assert imported.json()["accounts_require_admin_setup"] is True
+
+    roster = await client.get(f"/api/v1/classes/{class_id}/students", headers=th)
+    assert roster.status_code == 200
+    assert roster.json()[0]["roll_number"] == "R-101"

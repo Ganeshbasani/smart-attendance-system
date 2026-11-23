@@ -33,6 +33,18 @@ class Department(Base):
     courses = relationship("Course", back_populates="department")
 
 
+class OrganizationSettings(Base):
+    """Single-tenant workspace profile and sector-specific labels."""
+    __tablename__ = "organization_settings"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, default="My Organization")
+    sector = Column(String, nullable=False, default="other")  # school | college | office | other
+    has_sections = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+
+
 class AcademicSession(Base):
     """An academic term (e.g. '2026-27 Odd Semester'), not an attendance session."""
 
@@ -104,6 +116,8 @@ class ClassSection(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     code = Column(String, unique=True, nullable=False, index=True)
+    level = Column(String, nullable=True, index=True)  # grade, program, team, or department label
+    section = Column(String, nullable=True, index=True)  # NULL is valid for no-section organizations
     course_id = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True)
     teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True)
     academic_session_id = Column(Integer, ForeignKey("academic_sessions.id", ondelete="SET NULL"), nullable=True)

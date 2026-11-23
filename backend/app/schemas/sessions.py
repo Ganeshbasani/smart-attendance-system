@@ -11,6 +11,7 @@ DecisionOutcome = Literal["VERIFIED", "REVIEW_REQUIRED", "REJECTED", "DUPLICATE"
 class SessionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     class_section_id: Optional[int] = None
+    mode: Literal["manual", "biometric"] = "biometric"
     scheduled_start: Optional[datetime] = None
     scheduled_end: Optional[datetime] = None
 
@@ -20,6 +21,7 @@ class SessionOut(BaseModel):
     id: int
     name: str
     class_section_id: Optional[int] = None
+    attendance_mode: str = "biometric"
     status: str
     scheduled_start: Optional[datetime] = None
     scheduled_end: Optional[datetime] = None
@@ -44,6 +46,7 @@ class DecisionOut(BaseModel):
     session_id: int
     user_id: int
     decision: str
+    attendance_status: Optional[str] = None
     confidence: Optional[float] = None
     quality_score: Optional[float] = None
     liveness_ok: Optional[bool] = None
@@ -62,6 +65,16 @@ class ManualOverrideRequest(BaseModel):
 class ReviewRequestManual(BaseModel):
     decision: Literal["VERIFIED", "REJECTED"]
     reason: str = Field(min_length=3, max_length=1000)
+
+
+class ManualAttendanceItem(BaseModel):
+    user_id: int = Field(gt=0)
+    status: Literal["present", "absent"]
+
+
+class ManualAttendanceBatch(BaseModel):
+    entries: list[ManualAttendanceItem] = Field(min_length=1, max_length=500)
+    reason: Optional[str] = Field(default=None, max_length=1000)
 
 
 class EventOut(BaseModel):

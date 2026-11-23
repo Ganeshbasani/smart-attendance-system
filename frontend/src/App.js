@@ -13,6 +13,7 @@ import StudentDashboard from './components/StudentDashboard';
 import TeacherDashboard from './components/TeacherDashboard';
 import AcademicManagement from './components/AcademicManagement';
 import LiveAttendance from './components/LiveAttendance';
+import ManualAttendance from './components/ManualAttendance';
 import SettingsPage from './components/SettingsPage';
 import UserProfile from './components/UserProfile';
 import UserAttendance from './components/UserAttendance';
@@ -145,6 +146,10 @@ function App() {
           <Route
             path="/live"
             element={user && (isAdmin || isTeacher) ? <LiveAttendance /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/manual-attendance"
+            element={user && (isAdmin || isTeacher) ? <ManualAttendance /> : <Navigate to="/login" />}
           />
           
           {/* Protected Routes - All Users */}

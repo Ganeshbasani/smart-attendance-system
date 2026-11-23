@@ -557,6 +557,18 @@ The project includes Docker configuration, CI workflow automation, and a cloud d
 
 ---
 
+## 🧭 Engineering Documentation
+
+The `docs/` folder tracks the audited implementation and planned work. It distinguishes deployed behavior from partial or unvalidated capabilities:
+
+- [Project audit](docs/PROJECT_AUDIT.md)
+- [Current architecture](docs/CURRENT_ARCHITECTURE.md)
+- [Feature status](docs/FEATURE_STATUS.md)
+- [Security audit](docs/SECURITY_AUDIT.md)
+- [Technical decisions](docs/TECHNICAL_DECISIONS.md)
+- [Implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md)
+- [Architecture blueprint](docs/ARCHITECTURE_BLUEPRINT.md)
+
 ## 📜 License
 
 This project is released under the **MIT License**. See [`LICENSE`](LICENSE) for details.

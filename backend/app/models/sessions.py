@@ -30,6 +30,8 @@ class AttendanceSession(Base):
     name = Column(String, nullable=False, index=True)
     # draft | active | closed
     status = Column(String, nullable=False, default="draft", index=True)
+    # manual | biometric. Existing sessions migrate as biometric.
+    attendance_mode = Column(String, nullable=False, default="biometric", index=True)
     scheduled_start = Column(DateTime, nullable=True)
     scheduled_end = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
@@ -61,6 +63,8 @@ class SessionAttendance(Base):
     quality_score = Column(Float, nullable=True)
     liveness_ok = Column(Boolean, nullable=True)
     reason = Column(Text, nullable=True)
+    # present | absent for physical roster attendance; NULL for other decisions.
+    attendance_status = Column(String, nullable=True, index=True)
     # Teacher/admin who made a manual override / reviewed a decision.
     marked_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     marked_at = Column(DateTime, default=utc_now_naive)
