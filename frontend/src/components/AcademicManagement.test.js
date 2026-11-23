@@ -1,9 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import AcademicManagement from './AcademicManagement';
 import { academicAPI } from '../services/api';
 
 jest.mock('../services/api', () => ({
   academicAPI: {
+    organization: jest.fn(() => Promise.resolve({ data: { name: 'My Organization', sector: 'school', has_sections: true } })),
+    updateOrganization: jest.fn(() => Promise.resolve({ data: { name: 'My Organization', sector: 'school', has_sections: true } })),
     list: jest.fn(() => Promise.resolve({ data: [] })),
     create: jest.fn(() => Promise.resolve({ data: { id: 1 } })),
     update: jest.fn(() => Promise.resolve({ data: {} })),
@@ -18,6 +20,12 @@ describe('AcademicManagement', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // CRA sets resetMocks: true, so implementations must be re-applied here.
+    academicAPI.organization.mockImplementation(() => Promise.resolve({
+      data: { name: 'My Organization', sector: 'school', has_sections: true },
+    }));
+    academicAPI.updateOrganization.mockImplementation(() => Promise.resolve({
+      data: { name: 'My Organization', sector: 'school', has_sections: true },
+    }));
     academicAPI.list.mockImplementation(() => Promise.resolve({ data: [] }));
     academicAPI.create.mockImplementation(() => Promise.resolve({ data: { id: 1 } }));
     academicAPI.update.mockImplementation(() => Promise.resolve({ data: {} }));
@@ -34,8 +42,9 @@ describe('AcademicManagement', () => {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
     }
     fireEvent.click(screen.getByRole('button', { name: /Add Department/i }));
-    expect(screen.getByText(/New Department/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Name/i)).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/New Department/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: /Name/i })).toBeInTheDocument();
   });
 
   it('loads the active resource from the versioned API', () => {
