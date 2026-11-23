@@ -14,9 +14,21 @@ import {
   Paper,
   Divider,
   Stack,
+  Alert,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowForward,
+  BeachAccess,
+  EventAvailable,
 } from '@mui/icons-material';
 import { userAPI } from '../services/api';
 import { useAuth } from '../App';
@@ -34,6 +46,28 @@ const EmployeeDashboard = () => {
     attendanceRate: 0,
     streak: 0,
   });
+  const [todayRecord, setTodayRecord] = useState(null);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [banner, setBanner] = useState(null); // { type: 'success'|'error', text }
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [leaveDialog, setLeaveDialog] = useState({
+    open: false,
+    start_date: '',
+    end_date: '',
+    leave_type: 'annual',
+    reason: '',
+  });
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
+
+  const fetchLeaves = async () => {
+    try {
+      const response = await userAPI.getLeaveRequests();
+      setLeaveRequests(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch leave requests:', error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -50,6 +84,7 @@ const EmployeeDashboard = () => {
       const monthEnd = endOfMonth(today);
       
       const todayRecord = attendanceRecords.find(record => record.date === todayStr);
+      setTodayRecord(todayRecord || null);
       const thisWeekRecords = attendanceRecords.filter(record => {
         const recordDate = new Date(record.date);
         return isWithinInterval(recordDate, { start: weekStart, end: weekEnd });
@@ -97,7 +132,56 @@ const EmployeeDashboard = () => {
 
   useEffect(() => {
     fetchData();
+    fetchLeaves();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.unique_id]);
+
+  const canCheckout = todayRecord?.status === 'present' && !todayRecord?.time_out;
+
+  const handleCheckout = async () => {
+    setCheckoutLoading(true);
+    setBanner(null);
+    try {
+      const response = await userAPI.checkout();
+      setBanner({ type: 'success', text: response.data.message });
+      await fetchData();
+    } catch (error) {
+      setBanner({
+        type: 'error',
+        text: error.response?.data?.detail || 'Checkout failed. Please try again.',
+      });
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const handleLeaveSubmit = async () => {
+    setLeaveError('');
+    if (!leaveDialog.start_date || !leaveDialog.end_date) {
+      setLeaveError('Please choose both dates.');
+      return;
+    }
+    if (leaveDialog.end_date < leaveDialog.start_date) {
+      setLeaveError('End date must not be before start date.');
+      return;
+    }
+    setLeaveSaving(true);
+    try {
+      await userAPI.createLeaveRequest({
+        start_date: leaveDialog.start_date,
+        end_date: leaveDialog.end_date,
+        leave_type: leaveDialog.leave_type,
+        reason: leaveDialog.reason || null,
+      });
+      setLeaveDialog({ open: false, start_date: '', end_date: '', leave_type: 'annual', reason: '' });
+      setBanner({ type: 'success', text: 'Leave request submitted for approval.' });
+      await fetchLeaves();
+    } catch (error) {
+      setLeaveError(error.response?.data?.detail || 'Failed to submit leave request.');
+    } finally {
+      setLeaveSaving(false);
+    }
+  };
 
   const downloadReport = () => {
     const rows = [
@@ -234,6 +318,56 @@ const EmployeeDashboard = () => {
                   </Grid>
                 </Grid>
 
+                {/* Checkout & leave actions */}
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  {canCheckout && (
+                    <Grid item xs={12} sm={6}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        size="large"
+                        disabled={checkoutLoading}
+                        onClick={handleCheckout}
+                        startIcon={<EventAvailable />}
+                        sx={{ py: 2.5, borderRadius: '16px', border: '2px solid #bbf7d0', color: '#16a34a', textTransform: 'none', fontWeight: '700', fontSize: '0.95rem', fontFamily: '"Inter", sans-serif', '&:hover': { border: '2px solid #86efac', background: '#f0fdf4' }, transition: 'all 0.3s ease' }}
+                      >
+                        {checkoutLoading ? 'Checking out…' : 'Check Out'}
+                      </Button>
+                    </Grid>
+                  )}
+                  <Grid item xs={12} sm={canCheckout ? 6 : 12}>
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      size="large"
+                      onClick={() => setLeaveDialog({ ...leaveDialog, open: true })}
+                      startIcon={<BeachAccess />}
+                      endIcon={
+                        leaveRequests.filter((r) => r.status === 'pending').length > 0 ? (
+                          <Chip
+                            size="small"
+                            label={leaveRequests.filter((r) => r.status === 'pending').length}
+                            sx={{ height: 20, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}
+                          />
+                        ) : null
+                      }
+                      sx={{ py: 2.5, borderRadius: '16px', border: '2px solid #e7e5e4', color: '#78716c', textTransform: 'none', fontWeight: '700', fontSize: '0.95rem', fontFamily: '"Inter", sans-serif', '&:hover': { border: '2px solid #d6d3d1', background: '#fafaf9' }, transition: 'all 0.3s ease' }}
+                    >
+                      Request Leave
+                    </Button>
+                  </Grid>
+                </Grid>
+
+                {banner && (
+                  <Alert
+                    severity={banner.type}
+                    onClose={() => setBanner(null)}
+                    sx={{ borderRadius: '12px', fontFamily: '"Inter", sans-serif', mt: 2 }}
+                  >
+                    {banner.text}
+                  </Alert>
+                )}
+
                 {/* Mini Stats Cards */}
                 <Grid container spacing={2}>
                   {[
@@ -353,6 +487,92 @@ const EmployeeDashboard = () => {
             </Stack>
           </Grid>
         </Grid>
+
+        {/* Leave request dialog */}
+        <Dialog
+          open={leaveDialog.open}
+          onClose={() => setLeaveDialog({ ...leaveDialog, open: false })}
+          PaperProps={{ sx: { borderRadius: '20px', p: 1 } }}
+        >
+          <DialogTitle sx={{ fontWeight: 800, color: '#212E46', fontFamily: '"Inter", sans-serif' }}>
+            Request Leave
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 1, minWidth: 380 }}>
+              {leaveError && (
+                <Alert severity="error" sx={{ borderRadius: '10px', fontFamily: '"Inter", sans-serif' }}>
+                  {leaveError}
+                </Alert>
+              )}
+              <Stack direction="row" spacing={2}>
+                <TextField
+                  label="From"
+                  type="date"
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  value={leaveDialog.start_date}
+                  onChange={(e) => setLeaveDialog({ ...leaveDialog, start_date: e.target.value })}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontFamily: '"Inter", sans-serif' } }}
+                />
+                <TextField
+                  label="To"
+                  type="date"
+                  size="small"
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  value={leaveDialog.end_date}
+                  onChange={(e) => setLeaveDialog({ ...leaveDialog, end_date: e.target.value })}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontFamily: '"Inter", sans-serif' } }}
+                />
+              </Stack>
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontFamily: '"Inter", sans-serif' }}>Type</InputLabel>
+                <Select
+                  value={leaveDialog.leave_type}
+                  label="Type"
+                  onChange={(e) => setLeaveDialog({ ...leaveDialog, leave_type: e.target.value })}
+                  sx={{ borderRadius: '12px', fontFamily: '"Inter", sans-serif' }}
+                >
+                  <MenuItem value="annual">Annual</MenuItem>
+                  <MenuItem value="sick">Sick</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Reason"
+                multiline
+                minRows={3}
+                value={leaveDialog.reason}
+                onChange={(e) => setLeaveDialog({ ...leaveDialog, reason: e.target.value })}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px', fontFamily: '"Inter", sans-serif' } }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={() => setLeaveDialog({ ...leaveDialog, open: false })}
+              sx={{ textTransform: 'none', fontWeight: 700, fontFamily: '"Inter", sans-serif', color: '#78716c' }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              disabled={leaveSaving}
+              onClick={handleLeaveSubmit}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 700,
+                fontFamily: '"Inter", sans-serif',
+                borderRadius: '10px',
+                background: '#f97316',
+                '&:hover': { background: '#ea580c' },
+              }}
+            >
+              {leaveSaving ? 'Submitting…' : 'Submit Request'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Container>
     </Box>
   );

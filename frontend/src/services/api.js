@@ -51,6 +51,30 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (userData) => api.post('/auth/register', userData),
   login: (credentials) => api.post('/auth/login', credentials),
+  me: () => api.get('/auth/me'),
+};
+
+// Academic domain (AttendX Phase 2), versioned API. Resource names are the
+// path segments exposed by the backend: departments, academic-sessions,
+// courses, teachers, students, classes.
+export const academicAPI = {
+  organization: () => api.get('/api/v1/organization'),
+  updateOrganization: (data) => api.put('/api/v1/organization', data),
+  list: (resource, params = {}) => api.get(`/api/v1/${resource}`, { params }),
+  create: (resource, data) => api.post(`/api/v1/${resource}`, data),
+  update: (resource, id, data) => api.put(`/api/v1/${resource}/${id}`, data),
+  remove: (resource, id) => api.delete(`/api/v1/${resource}/${id}`),
+  listEnrollments: (classId) => api.get(`/api/v1/classes/${classId}/students`),
+  enroll: (classId, studentId) => api.post(`/api/v1/classes/${classId}/enrollments`, { student_id: studentId }),
+  unenroll: (classId, studentId) => api.delete(`/api/v1/classes/${classId}/enrollments/${studentId}`),
+  previewRoster: (classId, file) => {
+    const data = new FormData();
+    data.append('file', file);
+    return api.post(`/api/v1/classes/${classId}/roster/preview`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  importRoster: (classId, students) => api.post(`/api/v1/classes/${classId}/roster/import`, { students }),
 };
 
 // Liveness APIs
@@ -135,6 +159,13 @@ export const userAPI = {
     return api.get(`/user/attendance?start_date=${today}&end_date=${today}`);
   },
   getRegisteredFaces: () => api.get('/user/face/images'),
+  getMyShift: () => api.get('/user/shift'),
+  getHolidays: (year) => api.get(`/user/holidays${year ? `?year=${year}` : ''}`),
+  getLeaveRequests: () => api.get('/user/leave-requests'),
+  createLeaveRequest: (payload) => api.post('/user/leave-requests', payload),
+  getCorrectionRequests: () => api.get('/user/correction-requests'),
+  createCorrectionRequest: (payload) => api.post('/user/correction-requests', payload),
+  checkout: () => api.post('/attendance/checkout'),
 };
 
 // Admin APIs
@@ -182,6 +213,9 @@ export const adminAPI = {
   
   // Face Management
   getUsersFaceStatus: () => api.get('/admin/users/face-status'),
+  // Gallery consistency vs the configured ArcFace pack (stale-model users,
+  // thresholds). See GET /admin/face/model-status.
+  getFaceModelStatus: () => api.get('/admin/face/model-status'),
   deleteUserFaceData: (userId) => api.delete(`/admin/user/${userId}/face`),
   registerUserFace: (userId, files) => {
     const formData = new FormData();
@@ -196,6 +230,17 @@ export const adminAPI = {
   },
   getUserFaceDetails: (userId) => api.get(`/admin/user/${userId}/face/details`),
   getUserFaceImages: (userId) => api.get(`/admin/user/${userId}/face/images`),
+  getAuditLogs: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.action) queryParams.append('action', params.action);
+    if (params.actor_email) queryParams.append('actor_email', params.actor_email);
+    if (params.entity_type) queryParams.append('entity_type', params.entity_type);
+    if (params.start_date) queryParams.append('start_date', params.start_date);
+    if (params.end_date) queryParams.append('end_date', params.end_date);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/audit-logs?${queryParams}`);
+  },
   bulkDeleteFaceData: (userIds) => {
     const formData = new FormData();
     userIds.forEach(id => formData.append('user_ids', id));
@@ -205,6 +250,38 @@ export const adminAPI = {
       },
     });
   },
+
+  // Shifts & holidays
+  getShifts: () => api.get('/admin/shifts'),
+  createShift: (shift) => api.post('/admin/shifts', shift),
+  updateShift: (shiftId, shift) => api.put(`/admin/shifts/${shiftId}`, shift),
+  deleteShift: (shiftId) => api.delete(`/admin/shifts/${shiftId}`),
+  assignUserShift: (userId, shiftId) =>
+    api.post(`/admin/users/${userId}/shift-assignment`, { shift_id: shiftId }),
+  getHolidays: (year) =>
+    api.get(`/admin/holidays${year ? `?year=${year}` : ''}`),
+  createHoliday: (holiday) => api.post('/admin/holidays', holiday),
+  deleteHoliday: (holidayId) => api.delete(`/admin/holidays/${holidayId}`),
+
+  // Leave & correction approval queues
+  getLeaveRequests: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/leave-requests?${queryParams}`);
+  },
+  reviewLeaveRequest: (requestId, decision, note) =>
+    api.post(`/admin/leave-requests/${requestId}/${decision}`, { note }),
+  getCorrectionRequests: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    return api.get(`/admin/correction-requests?${queryParams}`);
+  },
+  reviewCorrectionRequest: (requestId, decision, note) =>
+    api.post(`/admin/correction-requests/${requestId}/${decision}`, { note }),
 };
 
 // Analytics APIs
@@ -216,6 +293,37 @@ export const analyticsAPI = {
     api.get(`/analytics/reports/automated?report_type=${reportType}`),
   getAnomalies: (days = 7, severity = 'all') => 
     api.get(`/analytics/anomalies?days=${days}&severity=${severity}`),
+};
+
+// Notifications (current user only)
+export const notificationsAPI = {
+  list: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.offset) queryParams.append('offset', params.offset);
+    if (params.unreadOnly) queryParams.append('unread_only', 'true');
+    return api.get(`/notifications?${queryParams}`);
+  },
+  unreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllRead: () => api.post('/notifications/read-all'),
+};
+
+// Sessions + decision engine (AttendX Phase 7)
+export const sessionAPI = {
+  list: (params = {}) => api.get('/api/v1/sessions', { params }),
+  create: (data) => api.post('/api/v1/sessions', data),
+  get: (id) => api.get(`/api/v1/sessions/${id}`),
+  start: (id) => api.post(`/api/v1/sessions/${id}/start`),
+  stop: (id) => api.post(`/api/v1/sessions/${id}/stop`),
+  submitDecision: (id, data) => api.post(`/api/v1/sessions/${id}/decisions`, data),
+  records: (id, decision) => api.get(`/api/v1/sessions/${id}/records`, { params: decision ? { decision } : {} }),
+  events: (id, limit = 50) => api.get(`/api/v1/sessions/${id}/events`, { params: { limit } }),
+  manual: (id, data) => api.post(`/api/v1/sessions/${id}/manual`, data),
+  review: (id, studentId, data) => api.post(`/api/v1/sessions/${id}/review/${studentId}`, data),
+  roster: (id) => api.get(`/api/v1/sessions/${id}/roster`),
+  saveManualAttendance: (id, data) => api.put(`/api/v1/sessions/${id}/manual-attendance`, data),
+  manualReport: (params) => api.get('/api/v1/sessions/reports/manual', { params }),
 };
 
 // Utility function to convert webcam capture to file

@@ -11,5 +11,9 @@ class AttendanceResponse(BaseModel):
     user_id: int
     date: date
     time_in: Optional[time]
+    # Additive fields (Phase 2): present but null when not applicable/unknown.
+    time_out: Optional[time] = None
     status: str
+    is_late: Optional[bool] = None
+    is_early_leave: Optional[bool] = None
     created_at: datetime

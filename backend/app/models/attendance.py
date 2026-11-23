@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -13,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now_naive
 from app.db.base import Base
 
 
@@ -34,7 +34,12 @@ class Attendance(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
     time_in = Column(Time, nullable=True)
+    time_out = Column(Time, nullable=True)  # set by POST /attendance/checkout
     status = Column(String, nullable=False)  # "present" or "absent"
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Late/early flags are computed from the user's shift at mark/checkout
+    # time. NULL means "not applicable" (no shift assigned), not "on time".
+    is_late = Column(Boolean, nullable=True)
+    is_early_leave = Column(Boolean, nullable=True)
+    created_at = Column(DateTime, default=utc_now_naive)
 
     user = relationship("User", back_populates="attendances")

@@ -248,10 +248,12 @@ git clone https://github.com/Ganeshbasani/smart-attendance-system.git
 cd smart-attendance-system
 ```
 
-Create a root `.env`:
+Create a root `.env` (read by docker compose for `${VAR}` substitution):
 
-```env
-SECRET_KEY=replace-with-a-strong-random-secret
+```bash
+cp .env.example .env
+# then edit .env: generate SECRET_KEY with
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 Start the full stack:
@@ -404,7 +406,7 @@ cd frontend
 npm run build
 ```
 
-The repository includes GitHub Actions CI for backend tests and the frontend build.
+The repository includes GitHub Actions CI: backend tests plus a single-alembic-head check, and frontend tests plus a production build that fails on any ESLint warning (`CI=true`).
 
 ---
 
@@ -554,6 +556,18 @@ The project includes Docker configuration, CI workflow automation, and a cloud d
 </p>
 
 ---
+
+## 🧭 Engineering Documentation
+
+The `docs/` folder tracks the audited implementation and planned work. It distinguishes deployed behavior from partial or unvalidated capabilities:
+
+- [Project audit](docs/PROJECT_AUDIT.md)
+- [Current architecture](docs/CURRENT_ARCHITECTURE.md)
+- [Feature status](docs/FEATURE_STATUS.md)
+- [Security audit](docs/SECURITY_AUDIT.md)
+- [Technical decisions](docs/TECHNICAL_DECISIONS.md)
+- [Implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md)
+- [Architecture blueprint](docs/ARCHITECTURE_BLUEPRINT.md)
 
 ## 📜 License
 

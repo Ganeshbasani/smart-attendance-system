@@ -235,11 +235,26 @@ def verify_challenge_frames(challenge: Challenge, image_paths: List[str]) -> dic
     sweep = yaw_max - yaw_min
 
     # Signed extent in the requested direction, measured from the most frontal
-    # frame so a subject who starts off-centre is not penalised.
+    # frame so a subject who starts off-centre is not penalised. The frontal
+    # frame contributes exactly 0, so this is always >= 0 — it measures "how
+    # far toward the requested direction", never a negative value.
     frontal_idx = int(np.argmin(np.abs(yaws)))
     baseline = float(yaws[frontal_idx])
     sign = DIRECTIONS[challenge.direction]
-    directional = float(np.max((yaws - baseline) * sign))
+    # Extent in the requested direction under the documented (uncalibrated)
+    # convention — logged for calibration, never used directly for enforcement.
+    directional_raw = float(np.max((yaws - baseline) * sign))
+    # Extent in the opposite direction (also always >= 0).
+    opposite_raw = float(np.max((yaws - baseline) * -sign))
+    # LIVENESS_DIRECTION_SIGN selects which extent counts as "the requested
+    # direction" when enforcing LIVENESS_REQUIRE_DIRECTION: +1 = documented
+    # convention (historical behaviour), -1 = the capture path mirrors frames,
+    # so a correct turn measures as motion the other way round. A static image
+    # has both extents ~0 and fails either way.
+    if settings.LIVENESS_DIRECTION_SIGN < 0:
+        directional = opposite_raw
+    else:
+        directional = directional_raw
 
     # Planarity across the widest pose change, where a real head and a flat
     # image differ most.
@@ -253,7 +268,10 @@ def verify_challenge_frames(challenge: Challenge, image_paths: List[str]) -> dic
         "yaw_min": round(yaw_min, 2),
         "yaw_max": round(yaw_max, 2),
         "yaw_sweep": round(float(sweep), 2),
-        "yaw_directional": round(directional, 2),
+        "yaw_directional": round(directional_raw, 2),
+        "yaw_directional_opposite": round(opposite_raw, 2),
+        "yaw_directional_effective": round(directional, 2),
+        "direction_sign": -1 if settings.LIVENESS_DIRECTION_SIGN < 0 else 1,
         "requested_direction": challenge.direction,
         "planar_residual": round(residual, 4) if residual is not None else None,
     }

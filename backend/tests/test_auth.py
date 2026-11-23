@@ -15,7 +15,7 @@ async def test_register_success(client):
     body = resp.json()
     assert "access_token" in body
     assert body["user"]["email"] == "new@test.com"
-    assert body["user"]["role"] == "user"
+    assert body["user"]["role"] == "student"
 
 
 @pytest.mark.asyncio

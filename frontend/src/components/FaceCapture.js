@@ -172,7 +172,6 @@ const FaceCapture = () => {
       // The challenge proves these frames came from a live head movement.
       await faceAPI.registerFace(files, challengeId);
       
-      console.log('Face registration completed successfully!');
       navigate('/profile');
     } catch (error) {
       console.error('Face registration error:', error);

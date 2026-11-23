@@ -1,6 +1,7 @@
 """FastAPI application factory and entrypoint."""
 
 import os
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -8,20 +9,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core.config import settings, validate_security
 from app.core.limiter import limiter
 from app.core.logging import configure_logging, get_logger
-from app.db.session import run_migrations
+from app.core.request_context import RequestContext, reset_request_context, set_request_context
+from app.db.session import run_migrations, SessionLocal
 from app.api.routers import (
+    academic,
     admin,
+    admin_scheduling,
     analytics,
     attendance,
     auth,
     face,
     liveness,
+    notifications,
+    sessions,
     users,
+    user_scheduling,
 )
 
 configure_logging()
@@ -36,6 +44,22 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.DATASET_DIR, exist_ok=True)
     run_migrations()
     logger.info(f"{settings.PROJECT_NAME} v{settings.API_VERSION} started")
+    # Effective AI/ML configuration in one line, so an operator can tell from
+    # the logs exactly which gallery and liveness rules a process is running
+    # (thresholds and the direction-sign calibration are easy to mis-set per
+    # environment and otherwise invisible until a match fails).
+    logger.info(
+        "Face/liveness config: "
+        f"model_pack={settings.FACE_MODEL_PACK} "
+        f"match_threshold={settings.FACE_MATCH_THRESHOLD} "
+        f"duplicate_threshold={settings.FACE_DUPLICATE_THRESHOLD} "
+        f"min_confidence={settings.FACE_ATTENDANCE_MIN_CONFIDENCE} "
+        f"liveness_challenge={settings.LIVENESS_CHALLENGE_ENABLED} "
+        f"min_yaw_sweep={settings.LIVENESS_MIN_YAW_SWEEP} "
+        f"require_direction={settings.LIVENESS_REQUIRE_DIRECTION} "
+        f"direction_sign={settings.LIVENESS_DIRECTION_SIGN:+d} "
+        f"enforce_planarity={settings.LIVENESS_ENFORCE_PLANARITY}"
+    )
     yield
 
 
@@ -58,6 +82,28 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["X-Total-Count"],
     )
+
+    @app.middleware("http")
+    async def request_context_middleware(request: Request, call_next):
+        # Correlation id: accept a caller-supplied one (sanitized), otherwise
+        # generate. Exposed back on the response and injected into every log
+        # line and audit record for this request.
+        incoming = request.headers.get(settings.REQUEST_ID_HEADER, "")
+        request_id = incoming.strip()[:128] if incoming.strip() else uuid.uuid4().hex
+        client_host = request.client.host if request.client else None
+        token = set_request_context(
+            RequestContext(
+                request_id=request_id,
+                ip_address=client_host,
+                user_agent=request.headers.get("user-agent"),
+            )
+        )
+        try:
+            response = await call_next(request)
+        finally:
+            reset_request_context(token)
+        response.headers[settings.REQUEST_ID_HEADER] = request_id
+        return response
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -107,16 +153,50 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok"}
 
-    for router in (
+    @app.get("/ready", tags=["health"])
+    async def ready():
+        """
+        Readiness probe: verifies the process can reach the database.
+
+        `/health` only proves the process is up; `/ready` proves it can serve
+        traffic. Returns 503 so orchestrators and load balancers route away
+        from an instance whose DB is unavailable.
+        """
+        try:
+            db = SessionLocal()
+            try:
+                db.execute(text("SELECT 1"))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Readiness check failed: database unreachable")
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "detail": "Database unreachable."},
+            )
+        return {"status": "ready"}
+
+    routers = (
         auth.router,
         face.router,
         liveness.router,
         attendance.router,
         users.router,
+        user_scheduling.router,
+        notifications.router,
         admin.router,
+        admin_scheduling.router,
         analytics.router,
-    ):
+    )
+    for router in routers:
         app.include_router(router)
+        # Additive /api/v1 aliases: legacy paths stay live for existing clients.
+        # FastAPI derives operation ids from the prefixed path, so no collisions.
+        app.include_router(router, prefix="/api/v1")
+
+    # New academic domain already declares its /api/v1 prefix.
+    app.include_router(academic.router)
+    app.include_router(sessions.router)
 
     return app
 

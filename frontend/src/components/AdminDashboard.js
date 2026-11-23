@@ -37,6 +37,9 @@ import {
 import { adminAPI, attendanceAPI } from '../services/api';
 import AnalyticsDashboard from './AnalyticsDashboard';
 import AdminFaceManagement from './AdminFaceManagement';
+import AdminAuditLogs from './AdminAuditLogs';
+import AdminShiftsHolidays from './AdminShiftsHolidays';
+import AdminRequests from './AdminRequests';
 import { format, parseISO } from 'date-fns';
 
 const AdminDashboard = () => {
@@ -322,6 +325,9 @@ const AdminDashboard = () => {
                 <Tab label="User Management" />
                 <Tab label="Analytics & Reports" />
                 <Tab label="Face Management" />
+                <Tab label="Shifts & Holidays" />
+                <Tab label="Requests" />
+                <Tab label="Audit Logs" />
               </Tabs>
             </Box>
           </Card>
@@ -609,6 +615,12 @@ const AdminDashboard = () => {
         {activeTab === 1 && <AnalyticsDashboard />}
         
         {activeTab === 2 && <AdminFaceManagement />}
+
+        {activeTab === 3 && <AdminShiftsHolidays />}
+
+        {activeTab === 4 && <AdminRequests />}
+
+        {activeTab === 5 && <AdminAuditLogs />}
 
         {/* Action Menu */}
         <Menu anchorEl={actionMenu.anchorEl} open={Boolean(actionMenu.anchorEl)} onClose={() => setActionMenu({ anchorEl: null, record: null })}

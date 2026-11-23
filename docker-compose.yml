@@ -9,7 +9,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: attendance
-      POSTGRES_PASSWORD: attendance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-attendance}
       POSTGRES_DB: attendance
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -22,7 +22,7 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg2://attendance:attendance@db:5432/attendance
+      DATABASE_URL: postgresql+psycopg2://attendance:${POSTGRES_PASSWORD:-attendance}@db:5432/attendance
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       BACKEND_CORS_ORIGINS: http://localhost:3000
@@ -33,6 +33,17 @@ services:
       - "8000:8000"
     volumes:
       - dataset:/app/dataset   # persist enrolled biometric data
+    healthcheck:
+      # /ready verifies DB reachability (not just process liveness).
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:

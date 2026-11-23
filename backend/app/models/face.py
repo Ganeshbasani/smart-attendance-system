@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy import (
     Column,
     DateTime,
@@ -11,6 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
+from app.core.time_utils import utc_now_naive
 from app.db.base import Base
 
 
@@ -29,8 +28,8 @@ class FaceEmbedding(Base):
     count = Column(Integer, nullable=False)
     dim = Column(Integer, nullable=False, default=512)
     model = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     user = relationship("User", back_populates="face_embedding")
 
@@ -46,6 +45,6 @@ class FaceImage(Base):
     image_data = Column(LargeBinary, nullable=False)
     content_type = Column(String, default="image/jpeg")
     quality_score = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
 
     user = relationship("User", back_populates="face_images")

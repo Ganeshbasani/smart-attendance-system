@@ -61,7 +61,45 @@ class Settings(BaseSettings):
     DATASET_DIR: str = str(BASE_DIR / "dataset")
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
 
+    # ----- Uploads -----
+    # Biometric images are multipart uploads; reject anything that is not an
+    # image and anything larger than this before it is written to disk.
+    MAX_UPLOAD_SIZE_MB: int = 10
+    ALLOWED_IMAGE_CONTENT_TYPES: str = "image/jpeg,image/png,image/webp"
+
+    # ----- Observability -----
+    # Correlation id propagated through logs and returned to the caller.
+    REQUEST_ID_HEADER: str = "X-Request-ID"
+    # Audit logging can be disabled for local experiments, but is on by
+    # default because admin/biometric actions must be traceable.
+    AUDIT_LOG_ENABLED: bool = True
+
+    # ----- Notifications -----
+    # In-app notifications (leave/correction decisions, shift changes). Rows
+    # are always scoped to a single user; a notification failure never breaks
+    # the operation that triggered it (logged and swallowed, like audit).
+    NOTIFICATIONS_ENABLED: bool = True
+    # Optional email copy of each notification. OFF by default — requires the
+    # SMTP_* settings below. Sending is best-effort and synchronous (this
+    # stack has no task queue); failures are logged and never raised.
+    EMAIL_NOTIFY_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    # Envelope sender; falls back to SMTP_USERNAME when empty.
+    SMTP_FROM: str = ""
+    SMTP_TLS: bool = True
+    SMTP_TIMEOUT_SECONDS: int = 5
+
     # ----- Face recognition -----
+    # ArcFace model pack used for detection + embeddings. Every enrolled
+    # embedding row records the pack it was computed with; only rows matching
+    # this pack are loaded into the matching cache (see face_recognition
+    # _refresh_cache). After changing this, existing enrollments must be
+    # re-registered — GET /admin/face/model-status lists the stale users.
+    # Calibrate FACE_MATCH_THRESHOLD / FACE_DUPLICATE_THRESHOLD against your
+    # own labeled photos with `python -m scripts.benchmark_thresholds`.
     FACE_MODEL_PACK: str = "buffalo_l"
     FACE_USE_GPU: bool = False
     FACE_MATCH_THRESHOLD: float = 0.42
@@ -92,14 +130,25 @@ class Settings(BaseSettings):
     # asked for. This is the part a pre-recorded video cannot reliably satisfy,
     # since the direction is chosen per attempt.
     #
-    # OFF by default and intentionally so. The webcam preview is mirrored and
-    # react-webcam mirrors its screenshots too, so the browser's notion of
-    # "left" may be the opposite sign to InsightFace's yaw. Enforcing an
-    # unverified sign would reject every genuine user. The signed figure is
-    # logged as `yaw_directional` on every attempt; once real logs confirm the
-    # sign, set this to true. Blocking static photos does not depend on it —
-    # that comes from the sweep magnitude below, which is sign-independent.
+    # OFF by default and intentionally so. Two sign conventions stack: the
+    # capture path mirrors every frame (FaceCamera sets react-webcam's
+    # `mirrored`, which flips the screenshot bytes), and InsightFace's yaw
+    # sign is only documented, never verified against this pipeline. Enforcing
+    # an unverified sign would reject every genuine user. Both directional
+    # extents are logged on every attempt (`yaw_directional` and
+    # `yaw_directional_opposite`); measure the actual convention from real
+    # logs with `python -m scripts.calibrate_direction`, set
+    # LIVENESS_DIRECTION_SIGN to the sign it recommends, then flip this to
+    # true. Blocking static photos does not depend on any of it — that comes
+    # from the sweep magnitude below, which is sign-independent.
     LIVENESS_REQUIRE_DIRECTION: bool = False
+    # Selects which yaw extent counts as "the requested direction" when
+    # enforcing LIVENESS_REQUIRE_DIRECTION: +1 = documented convention
+    # (historical behaviour), -1 = capture path mirrors frames, so a correct
+    # turn measures as motion the opposite way. Only meaningful once
+    # calibrated from real capture logs — see scripts/calibrate_direction.py.
+    # Does NOT affect the sweep-magnitude check, which is sign-independent.
+    LIVENESS_DIRECTION_SIGN: int = 1
     # Frames needed to evidence a turn. Too few and there is no motion to check.
     LIVENESS_MIN_FRAMES: int = 5
     LIVENESS_MAX_FRAMES: int = 30
@@ -125,6 +174,14 @@ class Settings(BaseSettings):
     # not. Deliberately low so genuine near-static faces are never rejected.
     ATTENDANCE_MIN_FRAME_DIFF: float = 0.75
 
+    # ----- Smart decision engine (AttendX Phase 7) -----
+    # Outcome bands for session-based verification. These are separate from the
+    # older kiosk thresholds so the existing attendance flow is unaffected.
+    # Values are deliberately conservative: uncertain matches go to review
+    # rather than being auto-accepted or rejected outright.
+    DECISION_MIN_CONFIDENCE: float = 50.0
+    DECISION_MIN_QUALITY: float = 45.0
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
@@ -132,6 +189,18 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
+
+    @property
+    def allowed_image_content_types(self) -> List[str]:
+        return [
+            c.strip().lower()
+            for c in self.ALLOWED_IMAGE_CONTENT_TYPES.split(",")
+            if c.strip()
+        ]
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 @lru_cache

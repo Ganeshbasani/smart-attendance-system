@@ -7,19 +7,37 @@ from datetime import date as date_type, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api import deps
 from app.core.config import settings
 from app.core.time_utils import now_local, today_local
+from app.core.uploads import read_upload_with_limits
 from app.db.session import get_db
-from app.models import Attendance, User
+from app.models import Attendance, AuditLog, User
 from app.schemas import AttendanceResponse, UserResponse
+from app.services.audit import record as audit_record
 from app.services.face_recognition import FaceEnrollmentError, face_service
+from app.services.scheduling import is_late as scheduling_is_late
 
 logger = logging.getLogger("smart_attendance.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# The only attendance statuses the system writes or displays anywhere
+# (dashboards, analytics, exports). Admin edits are rejected outside this set
+# so a malformed request cannot persist a status nothing else understands.
+ALLOWED_ATTENDANCE_STATUSES = {"present", "absent"}
+
+
+def _validate_status(status: str) -> str:
+    if status not in ALLOWED_ATTENDANCE_STATUSES:
+        allowed = ", ".join(sorted(ALLOWED_ATTENDANCE_STATUSES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{status}'. Allowed: {allowed}.",
+        )
+    return status
 
 
 @router.get("/users")
@@ -58,32 +76,37 @@ async def get_attendance_records(
 ):
     """List attendance records with optional date/user filters and pagination.
     Total count is returned in the X-Total-Count header."""
-    query = db.query(Attendance).join(User)
+    # Count on a plain query (no eager loads), then fetch the page with the
+    # user joined in — previously this endpoint loaded every user in the
+    # database into memory to resolve names.
+    base = db.query(Attendance)
     if date:
-        query = query.filter(Attendance.date == date)
+        base = base.filter(Attendance.date == date)
     if user_id:
         user = db.query(User).filter(User.unique_id == user_id).first()
-        if user:
-            query = query.filter(Attendance.user_id == user.id)
+        # Unknown user_id → match nothing (previously the filter was silently
+        # dropped and the full list came back).
+        base = base.filter(Attendance.user_id == (user.id if user else -1))
 
-    total = query.count()
-    query = query.order_by(Attendance.id.desc())
+    total = base.count()
+    query = base.options(joinedload(Attendance.user)).order_by(Attendance.id.desc())
     if limit is not None:
         query = query.offset(offset).limit(limit)
     elif offset:
         query = query.offset(offset)
 
     records = query.all()
-    users_by_id = {u.id: u for u in db.query(User).all()}
     result = []
     for record in records:
-        user = users_by_id.get(record.user_id)
         result.append({
             "id": record.id,
-            "user": UserResponse.model_validate(user),
+            "user": UserResponse.model_validate(record.user),
             "date": record.date.isoformat(),
             "time_in": record.time_in.isoformat() if record.time_in else None,
+            "time_out": record.time_out.isoformat() if record.time_out else None,
             "status": record.status,
+            "is_late": record.is_late,
+            "is_early_leave": record.is_early_leave,
             "created_at": record.created_at.isoformat(),
         })
     response.headers["X-Total-Count"] = str(total)
@@ -95,18 +118,54 @@ async def mark_absent_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
+    """
+    Create absent rows for every active user who has not checked in today.
+
+    Skipped entirely on holidays. Users with an approved leave request
+    covering today get no row either — they are not absent, they are on leave.
+    """
+    from app.models import Holiday
+    from app.services.scheduling import has_approved_leave
+
     today = today_local()
+
+    holiday = db.query(Holiday).filter(Holiday.date == today).first()
+    if holiday:
+        return {
+            "message": f"Skipped: today ({today}) is a holiday — {holiday.name}.",
+            "absent_count": 0,
+            "skipped_holiday": True,
+        }
+
     all_users = db.query(User).filter(User.is_active == True).all()  # noqa: E712
     attended_user_ids = db.query(Attendance.user_id).filter(Attendance.date == today).all()
-    attended_user_ids = [uid[0] for uid in attended_user_ids]
+    attended_user_ids = {uid[0] for uid in attended_user_ids}
 
     absent_count = 0
+    skipped_leave = 0
     for user in all_users:
-        if user.id not in attended_user_ids:
-            db.add(Attendance(user_id=user.id, date=today, status="absent"))
-            absent_count += 1
+        if user.id in attended_user_ids:
+            continue
+        if has_approved_leave(db, user.id, today):
+            skipped_leave += 1
+            continue
+        db.add(Attendance(user_id=user.id, date=today, status="absent"))
+        absent_count += 1
     db.commit()
-    return {"message": f"Marked {absent_count} users as absent for {today}"}
+    audit_record(
+        db,
+        action="attendance.mark_absent_bulk",
+        actor=current_user,
+        entity_type="attendance",
+        details={"date": str(today), "count": absent_count, "skipped_leave": skipped_leave},
+    )
+    return {
+        "message": f"Marked {absent_count} users as absent for {today}"
+        + (f" ({skipped_leave} skipped: approved leave)" if skipped_leave else ""),
+        "absent_count": absent_count,
+        "skipped_leave": skipped_leave,
+        "skipped_holiday": False,
+    }
 
 
 @router.put("/attendance/{attendance_id}")
@@ -121,18 +180,42 @@ async def update_attendance_record(
     if not attendance:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
+    _validate_status(status)
+    previous_status = attendance.status
     attendance.status = status
     if status == "present" and time_in:
         try:
             attendance.time_in = datetime.strptime(time_in, "%H:%M").time()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM")
+        user_for_shift = db.query(User).filter(User.id == attendance.user_id).first()
+        attendance.is_late = scheduling_is_late(
+            attendance.time_in,
+            user_for_shift.shift if user_for_shift else None,
+            attendance.date,
+        )
     elif status == "absent":
         attendance.time_in = None
+        attendance.time_out = None
+        attendance.is_late = None
+        attendance.is_early_leave = None
 
     db.commit()
     db.refresh(attendance)
     user = db.query(User).filter(User.id == attendance.user_id).first()
+    audit_record(
+        db,
+        action="attendance.update",
+        actor=current_user,
+        entity_type="attendance",
+        entity_id=str(attendance.id),
+        details={
+            "user": user.unique_id if user else None,
+            "date": str(attendance.date),
+            "from_status": previous_status,
+            "to_status": status,
+        },
+    )
     return {
         "message": f"Updated attendance for {user.full_name}",
         "attendance": {
@@ -140,7 +223,10 @@ async def update_attendance_record(
             "user": UserResponse.model_validate(user),
             "date": attendance.date.isoformat(),
             "time_in": attendance.time_in.isoformat() if attendance.time_in else None,
+            "time_out": attendance.time_out.isoformat() if attendance.time_out else None,
             "status": attendance.status,
+            "is_late": attendance.is_late,
+            "is_early_leave": attendance.is_early_leave,
             "created_at": attendance.created_at.isoformat(),
         },
     }
@@ -154,6 +240,7 @@ async def bulk_update_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_admin_user),
 ):
+    _validate_status(status)
     updated_count = 0
     for record_id in record_ids:
         attendance = db.query(Attendance).filter(Attendance.id == record_id).first()
@@ -164,10 +251,26 @@ async def bulk_update_attendance(
                     attendance.time_in = datetime.strptime(time_in, "%H:%M").time()
                 except ValueError:
                     continue
+                record_user = db.query(User).filter(User.id == attendance.user_id).first()
+                attendance.is_late = scheduling_is_late(
+                    attendance.time_in,
+                    record_user.shift if record_user else None,
+                    attendance.date,
+                )
             elif status == "absent":
                 attendance.time_in = None
+                attendance.time_out = None
+                attendance.is_late = None
+                attendance.is_early_leave = None
             updated_count += 1
     db.commit()
+    audit_record(
+        db,
+        action="attendance.bulk_update",
+        actor=current_user,
+        entity_type="attendance",
+        details={"status": status, "requested": len(record_ids), "updated": updated_count},
+    )
     return {"message": f"Updated {updated_count} attendance records"}
 
 
@@ -203,9 +306,19 @@ async def mark_user_present(
     else:
         attendance = Attendance(user_id=user.id, date=today, time_in=time_obj, status="present")
         db.add(attendance)
+    attendance.is_late = scheduling_is_late(time_obj, user.shift, today)
+    attendance.is_early_leave = None  # no checkout recorded yet
 
     db.commit()
     db.refresh(attendance)
+    audit_record(
+        db,
+        action="attendance.mark_present",
+        actor=current_user,
+        entity_type="attendance",
+        entity_id=str(attendance.id),
+        details={"user": user.unique_id, "date": str(today), "time_in": time_obj.isoformat()},
+    )
     return {
         "message": f"Marked {user.full_name} as present",
         "attendance": AttendanceResponse.model_validate(attendance),
@@ -222,10 +335,20 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Capture before delete: the instance is expired after commit.
+    deleted_name, deleted_email = user.full_name, user.email
     db.query(Attendance).filter(Attendance.user_id == user.id).delete()
     db.delete(user)  # cascades to face_embeddings / face_images
     db.commit()
-    return {"message": f"User {user.full_name} deleted successfully"}
+    audit_record(
+        db,
+        action="user.delete",
+        actor=current_user,
+        entity_type="user",
+        entity_id=user_id,
+        details={"email": deleted_email, "name": deleted_name},
+    )
+    return {"message": f"User {deleted_name} deleted successfully"}
 
 
 @router.get("/users/face-status")
@@ -270,6 +393,21 @@ async def get_users_face_status(
     }
 
 
+@router.get("/face/model-status")
+async def get_face_model_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user),
+):
+    """
+    Consistency of the stored face gallery against the configured model pack.
+
+    Embeddings computed with a different ArcFace pack are excluded from
+    recognition; this reports how many rows are affected and which users must
+    re-register after a FACE_MODEL_PACK change.
+    """
+    return face_service.model_status(db)
+
+
 @router.delete("/user/{user_id}/face")
 async def delete_user_face_data(
     user_id: str,
@@ -290,6 +428,14 @@ async def delete_user_face_data(
     db.query(FaceEmbedding).filter(FaceEmbedding.user_id == user.id).delete()
     user.face_registered = False
     db.commit()
+    audit_record(
+        db,
+        action="face.delete",
+        actor=current_user,
+        entity_type="user",
+        entity_id=user_id,
+        details={"reason": "admin_deleted_single"},
+    )
     return {
         "message": f"Face data deleted successfully for {user.full_name}",
         "user_id": user_id,
@@ -319,11 +465,19 @@ async def admin_register_user_face(
             ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
             path = os.path.join(settings.UPLOAD_DIR, f"admin_enroll_{target_user.unique_id}_{i}_{ts}.jpg")
             with open(path, "wb") as buffer:
-                buffer.write(await file.read())
+                buffer.write(await read_upload_with_limits(file))
             temp_paths.append(path)
 
         result = face_service.enroll_user(db, target_user, temp_paths)
         stats = result["statistics"]
+        audit_record(
+            db,
+            action="face.register",
+            actor=current_user,
+            entity_type="user",
+            entity_id=target_user.unique_id,
+            details={"images": stats["total_images"], "source": "admin_enrollment"},
+        )
         return {
             "message": f"Face registration successful for {target_user.full_name}",
             "user_id": target_user.unique_id,
@@ -483,9 +637,75 @@ async def bulk_delete_face_data(
             logger.exception(f"Bulk face delete failed for {user_id}")
             errors.append(f"Error deleting {user_id}")
     db.commit()
+    audit_record(
+        db,
+        action="face.bulk_delete",
+        actor=current_user,
+        entity_type="user",
+        details={"deleted_count": deleted_count, "requested": len(user_ids)},
+    )
     return {
         "message": f"Deleted face data for {deleted_count} users",
         "deleted_count": deleted_count,
         "total_requested": len(user_ids),
         "errors": errors if errors else None,
     }
+
+
+@router.get("/audit-logs")
+async def get_audit_logs(
+    response: Response,
+    action: str = Query(None, description="Filter by exact action, e.g. auth.login"),
+    actor_email: str = Query(None, description="Filter by the acting user's email"),
+    entity_type: str = Query(None, description="Filter by entity type, e.g. user"),
+    start_date: date_type = Query(None, description="Inclusive start date (YYYY-MM-DD)"),
+    end_date: date_type = Query(None, description="Inclusive end date (YYYY-MM-DD)"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_admin_user),
+):
+    """
+    Paginated audit trail of security-relevant actions.
+
+    Newest first. Total count is returned in the X-Total-Count header so the
+    frontend can paginate. Admin-only.
+    """
+    query = db.query(AuditLog)
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if actor_email:
+        query = query.filter(AuditLog.actor_email == actor_email)
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+    if start_date:
+        query = query.filter(AuditLog.created_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date:
+        # Inclusive end date: everything strictly before the next midnight.
+        query = query.filter(
+            AuditLog.created_at < datetime.fromordinal(end_date.toordinal() + 1)
+        )
+
+    total = query.count()
+    logs = (
+        query.order_by(AuditLog.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return [
+        {
+            "id": log.id,
+            "actor_id": log.actor_id,
+            "actor_email": log.actor_email,
+            "action": log.action,
+            "entity_type": log.entity_type,
+            "entity_id": log.entity_id,
+            "details": log.details,
+            "ip_address": log.ip_address,
+            "user_agent": log.user_agent,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in logs
+    ]

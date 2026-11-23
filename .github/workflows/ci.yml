@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, upgrade/production-hardening]
   pull_request:
     branches: [main]
 
@@ -33,6 +33,18 @@ jobs:
           RATE_LIMIT_ENABLED: "false"
         run: python -m pytest tests/ -v --tb=short
 
+      # A merge that leaves two alembic heads would break every later
+      # `alembic upgrade head` (including app startup). Fail fast here.
+      - name: Check migrations have a single head
+        run: |
+          heads="$(alembic heads | grep -c .)"
+          if [ "$heads" -ne 1 ]; then
+            echo "Expected exactly 1 alembic head, found $heads:"
+            alembic heads
+            exit 1
+          fi
+          alembic heads
+
   frontend-build:
     runs-on: ubuntu-latest
     defaults:
@@ -51,7 +63,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run tests
+        env:
+          CI: "true"
+        run: npx craco test --watchAll=false
+
+      # CI=true makes ESLint warnings fail the build (CRA behavior), so
+      # lint regressions cannot reach main silently.
       - name: Build
         env:
-          CI: "false"
+          CI: "true"
         run: npm run build

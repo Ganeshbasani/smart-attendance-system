@@ -12,6 +12,7 @@ from app.core.security import get_password_hash, validate_password_strength, ver
 from app.db.session import get_db
 from app.models import Attendance, FaceImage, User
 from app.schemas import UserChangePassword, UserResponse, UserUpdateProfile
+from app.services.scheduling import worked_minutes
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -74,7 +75,11 @@ async def get_user_attendance(
             "id": record.id,
             "date": record.date.isoformat(),
             "time_in": record.time_in.isoformat() if record.time_in else None,
+            "time_out": record.time_out.isoformat() if record.time_out else None,
             "status": record.status,
+            "is_late": record.is_late,
+            "is_early_leave": record.is_early_leave,
+            "worked_minutes": worked_minutes(record.time_in, record.time_out),
             "created_at": record.created_at.isoformat(),
         }
         for record in records

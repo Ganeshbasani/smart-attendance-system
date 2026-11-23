@@ -9,10 +9,16 @@ import Register from './components/Register';
 import FaceCapture from './components/FaceCapture';
 import MarkAttendance from './components/MarkAttendance';
 import AdminDashboard from './components/AdminDashboard';
-import EmployeeDashboard from './components/EmployeeDashboard';
+import StudentDashboard from './components/StudentDashboard';
+import TeacherDashboard from './components/TeacherDashboard';
+import AcademicManagement from './components/AcademicManagement';
+import LiveAttendance from './components/LiveAttendance';
+import ManualAttendance from './components/ManualAttendance';
+import SettingsPage from './components/SettingsPage';
 import UserProfile from './components/UserProfile';
 import UserAttendance from './components/UserAttendance';
 import Navbar from './components/Navbar';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -78,6 +84,10 @@ function App() {
     token: localStorage.getItem('token')
   };
 
+  const isAdmin = user?.role === 'admin';
+  const isTeacher = user?.role === 'teacher';
+  const isStudent = user?.role === 'student' || user?.role === 'user';
+
   if (loading) {
     return (
       <Box
@@ -93,9 +103,12 @@ function App() {
 
   return (
     <AuthContext.Provider value={authValue}>
-      <AppLayout>
-        <Navbar />
-        <Routes>
+      {/* A crash anywhere below shows a styled fallback instead of a
+          white screen; the error is logged, never shown to the user. */}
+      <ErrorBoundary>
+        <AppLayout>
+          <Navbar />
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route 
@@ -110,13 +123,39 @@ function App() {
           {/* Protected Routes - Admin Only */}
           <Route 
             path="/admin" 
-            element={user && user.role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} 
+            element={user && isAdmin ? <AdminDashboard /> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/admin/academic"
+            element={user && isAdmin ? <AcademicManagement /> : <Navigate to="/login" />}
+          />
+
+          {/* Role portals */}
+          <Route
+            path="/teacher"
+            element={user && isTeacher ? <TeacherDashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/student"
+            element={user && isStudent ? <StudentDashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/settings"
+            element={user ? <SettingsPage /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/live"
+            element={user && (isAdmin || isTeacher) ? <LiveAttendance /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/manual-attendance"
+            element={user && (isAdmin || isTeacher) ? <ManualAttendance /> : <Navigate to="/login" />}
           />
           
           {/* Protected Routes - All Users */}
           <Route 
             path="/dashboard" 
-            element={user ? (user.role === 'admin' ? <AdminDashboard /> : <EmployeeDashboard />) : <Navigate to="/login" />} 
+            element={user ? (isAdmin ? <AdminDashboard /> : (isTeacher ? <TeacherDashboard /> : <StudentDashboard />)) : <Navigate to="/login" />} 
           />
           <Route 
             path="/profile" 
@@ -137,8 +176,9 @@ function App() {
           
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </AppLayout>
+          </Routes>
+        </AppLayout>
+      </ErrorBoundary>
     </AuthContext.Provider>
   );
 }

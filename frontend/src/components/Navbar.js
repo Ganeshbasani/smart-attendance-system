@@ -13,12 +13,18 @@ import {
   useTheme,
   useMediaQuery,
   Divider,
+  Badge,
 } from '@mui/material';
 import {
   MoreVert,
+  Notifications,
+  LightMode,
+  DarkMode,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
+import { useThemeMode } from '../theme/ThemeContext';
+import { notificationsAPI } from '../services/api';
 
 const Navbar = () => {
   const theme = useTheme();
@@ -26,15 +32,85 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { mode, toggleMode } = useThemeMode();
+  const dark = mode === 'dark';
+  const roleLabel = (role) => (role === 'admin' ? 'Administrator' : role === 'teacher' ? 'Teacher' : 'Student');
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileMenuEl, setMobileMenuEl] = useState(null);
   const [scrolled, setScrolled] = useState(false);
+  // Notifications (current user only).
+  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Refresh the unread badge on mount and whenever the route changes (a
+  // decision may have happened while the user was elsewhere). Silent by
+  // design — a failed poll must never disrupt navigation.
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      setNotifications([]);
+      return undefined;
+    }
+    let cancelled = false;
+    notificationsAPI
+      .unreadCount()
+      .then((res) => {
+        if (!cancelled) setUnreadCount(res.data?.count ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, location.pathname]);
+
+  const handleNotifOpen = (event) => {
+    setNotifAnchorEl(event.currentTarget);
+    setNotifLoading(true);
+    notificationsAPI
+      .list({ limit: 10 })
+      .then((res) => setNotifications(res.data || []))
+      .catch(() => setNotifications([]))
+      .finally(() => setNotifLoading(false));
+  };
+  const handleNotifClose = () => setNotifAnchorEl(null);
+
+  const handleNotifMarkRead = async (id) => {
+    // Optimistic: flip locally, then reconcile with the server.
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+    try {
+      await notificationsAPI.markRead(id);
+    } catch {
+      // Re-sync the badge if the server rejected it.
+      notificationsAPI
+        .unreadCount()
+        .then((res) => setUnreadCount(res.data?.count ?? 0))
+        .catch(() => {});
+    }
+  };
+
+  const handleNotifMarkAllRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+    try {
+      await notificationsAPI.markAllRead();
+    } catch {
+      notificationsAPI
+        .unreadCount()
+        .then((res) => setUnreadCount(res.data?.count ?? 0))
+        .catch(() => {});
+    }
+  };
 
   const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -114,8 +190,15 @@ const Navbar = () => {
 
   const navigationItems = [
     { path: '/mark-attendance', label: 'Mark Attendance' },
+    ...((user?.role === 'admin' || user?.role === 'teacher')
+      ? [{ path: '/manual-attendance', label: 'Manual Attendance' }, { path: '/live', label: 'Live Session' }] : []),
     { path: '/dashboard', label: 'Dashboard' },
-    ...(user?.role === 'admin' ? [{ path: '/admin', label: 'Admin' }] : []),
+    { path: '/settings', label: 'Settings' },
+    ...(user?.role === 'admin' ? [
+      { path: '/admin', label: 'Admin' },
+      { path: '/admin/academic', label: 'Academic' },
+    ] : []),
+    ...(user?.role === 'teacher' ? [{ path: '/teacher', label: 'Classes' }] : []),
   ];
 
   const publicNavigationItems = [
@@ -129,10 +212,10 @@ const Navbar = () => {
       position="fixed"
       elevation={0}
       sx={{
-        background: shouldShowSolid ? 'rgba(255,255,255,0.85)' : 'transparent',
+        background: shouldShowSolid ? (dark ? 'rgba(30,41,59,0.92)' : 'rgba(255,255,255,0.85)') : 'transparent',
         backdropFilter: shouldShowSolid ? 'blur(20px) saturate(180%)' : 'none',
-        borderBottom: shouldShowSolid ? '1px solid rgba(0,0,0,0.06)' : '1px solid transparent',
-        color: shouldShowSolid ? '#1a1a1a' : '#ffffff',
+        borderBottom: shouldShowSolid ? (dark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)') : '1px solid transparent',
+        color: shouldShowSolid ? (dark ? '#e2e8f0' : '#1a1a1a') : '#ffffff',
         transition: 'all 0.3s ease',
         zIndex: 1100,
       }}
@@ -145,7 +228,7 @@ const Navbar = () => {
           sx={{ flexGrow: isMobile ? 1 : 0, cursor: 'pointer' }}
           onClick={() => navigateToPage('/')}
         >
-          <Typography variant="h6" fontWeight="700" sx={{ color: shouldShowSolid ? '#212E46' : '#ffffff', letterSpacing: '-0.02em', fontSize: '1.1rem', transition: 'color 0.3s ease', fontFamily: '"Inter", sans-serif' }}>
+          <Typography variant="h6" fontWeight="700" sx={{ color: shouldShowSolid ? (dark ? '#ffffff' : '#212E46') : '#ffffff', letterSpacing: '-0.02em', fontSize: '1.1rem', transition: 'color 0.3s ease', fontFamily: '"Inter", sans-serif' }}>
             SAS
           </Typography>
         </Box>
@@ -186,9 +269,9 @@ const Navbar = () => {
                   borderRadius: '10px',
                   fontWeight: 500,
                   textTransform: 'none',
-                  color: isActivePage(item.path) ? '#0f172a' : '#64748b',
-                  background: isActivePage(item.path) ? '#f1f5f9' : 'transparent',
-                  '&:hover': { background: '#f8fafc', color: '#0f172a' },
+                  color: isActivePage(item.path) ? (dark ? '#ffffff' : '#0f172a') : (dark ? '#94a3b8' : '#64748b'),
+                  background: isActivePage(item.path) ? (dark ? 'rgba(255,255,255,0.12)' : '#f1f5f9') : 'transparent',
+                  '&:hover': { background: dark ? 'rgba(255,255,255,0.08)' : '#f8fafc', color: dark ? '#ffffff' : '#0f172a' },
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -203,12 +286,40 @@ const Navbar = () => {
           <Box display="flex" alignItems="center" gap={2}>
             {!isMobile && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <IconButton
+                  onClick={toggleMode}
+                  aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+                  title={dark ? 'Light theme' : 'Dark theme'}
+                  sx={{ p: 1, color: shouldShowSolid ? (dark ? '#cbd5e1' : '#475569') : '#ffffff',
+                    '&:hover': { background: dark ? 'rgba(255,255,255,0.12)' : '#f1f5f9' } }}
+                >
+                  {dark ? <LightMode fontSize="small" /> : <DarkMode fontSize="small" />}
+                </IconButton>
+                <IconButton
+                  onClick={handleNotifOpen}
+                  aria-label="Notifications"
+                  sx={{
+                    p: 1,
+                    color: shouldShowSolid ? '#475569' : '#ffffff',
+                    '&:hover': { background: shouldShowSolid ? '#f1f5f9' : 'rgba(255,255,255,0.15)' },
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  <Badge
+                    badgeContent={unreadCount}
+                    color="error"
+                    max={9}
+                    sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', fontWeight: 700 } }}
+                  >
+                    <Notifications fontSize="small" />
+                  </Badge>
+                </IconButton>
                 <Box sx={{ textAlign: 'right' }}>
                   <Typography variant="body2" fontWeight="600" sx={{ color: shouldShowSolid ? '#0f172a' : '#ffffff', transition: 'color 0.3s ease' }}>
                     {user.full_name.split(' ')[0]}
                   </Typography>
                   <Typography variant="caption" sx={{ color: shouldShowSolid ? '#94a3b8' : 'rgba(255,255,255,0.7)', transition: 'color 0.3s ease' }}>
-                    {user.role === 'admin' ? 'Administrator' : 'Employee'}
+                    {roleLabel(user.role)}
                   </Typography>
                 </Box>
                 <IconButton
@@ -228,12 +339,32 @@ const Navbar = () => {
               </Box>
             )}
             {isMobile && (
-              <IconButton
-                onClick={handleMobileMenuOpen}
-                sx={{ background: shouldShowSolid ? '#f1f5f9' : 'rgba(255,255,255,0.15)', color: shouldShowSolid ? '#475569' : '#ffffff', '&:hover': { background: shouldShowSolid ? '#e2e8f0' : 'rgba(255,255,255,0.25)' }, transition: 'all 0.3s ease' }}
-              >
-                <MoreVert />
-              </IconButton>
+              <>
+                <IconButton
+                  onClick={handleNotifOpen}
+                  aria-label="Notifications"
+                  sx={{
+                    color: shouldShowSolid ? '#475569' : '#ffffff',
+                    '&:hover': { background: shouldShowSolid ? '#f1f5f9' : 'rgba(255,255,255,0.15)' },
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  <Badge
+                    badgeContent={unreadCount}
+                    color="error"
+                    max={9}
+                    sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', fontWeight: 700 } }}
+                  >
+                    <Notifications fontSize="small" />
+                  </Badge>
+                </IconButton>
+                <IconButton
+                  onClick={handleMobileMenuOpen}
+                  sx={{ background: shouldShowSolid ? '#f1f5f9' : 'rgba(255,255,255,0.15)', color: shouldShowSolid ? '#475569' : '#ffffff', '&:hover': { background: shouldShowSolid ? '#e2e8f0' : 'rgba(255,255,255,0.25)' }, transition: 'all 0.3s ease' }}
+                >
+                  <MoreVert />
+                </IconButton>
+              </>
             )}
           </Box>
         ) : (
@@ -317,6 +448,92 @@ const Navbar = () => {
           </MenuItem>
         </Menu>
 
+        {/* Notifications Menu (shared by desktop + mobile bells) */}
+        <Menu
+          anchorEl={notifAnchorEl}
+          open={Boolean(notifAnchorEl)}
+          onClose={handleNotifClose}
+          PaperProps={{
+            elevation: 0,
+            sx: {
+              mt: 1, borderRadius: '14px', border: '1px solid #f1f5f9',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.08)', minWidth: 320, maxWidth: '90vw',
+              '& .MuiMenuItem-root': {
+                px: 3, py: 1.5, borderRadius: '8px', mx: 1, my: 0.5,
+                '&:hover': { background: '#f8fafc' },
+              },
+            },
+          }}
+          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        >
+          <Box sx={{ p: 3, borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="subtitle2" fontWeight="700" sx={{ color: '#0f172a' }}>
+              Notifications
+            </Typography>
+            {unreadCount > 0 && (
+              <Typography
+                component="button"
+                onClick={handleNotifMarkAllRead}
+                sx={{
+                  border: 'none', background: 'transparent', cursor: 'pointer', p: 0,
+                  fontFamily: '"Inter", sans-serif', fontSize: '0.75rem', fontWeight: 600,
+                  color: '#f97316', '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                Mark all as read
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ maxHeight: 360, overflowY: 'auto', py: 1 }}>
+            {notifLoading ? (
+              <Box sx={{ px: 3, py: 3, textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ color: '#94a3b8' }}>Loading…</Typography>
+              </Box>
+            ) : notifications.length === 0 ? (
+              <Box sx={{ px: 3, py: 3, textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ color: '#94a3b8' }}>No notifications yet</Typography>
+              </Box>
+            ) : (
+              notifications.map((n) => (
+                <MenuItem
+                  key={n.id}
+                  onClick={() => {
+                    if (!n.is_read) handleNotifMarkRead(n.id);
+                  }}
+                  sx={{
+                    alignItems: 'flex-start !important',
+                    background: n.is_read ? 'transparent' : '#fff7ed',
+                    '&:hover': { background: n.is_read ? '#f8fafc' : '#ffedd5' },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', gap: 1.5, width: '100%' }}>
+                    <Box
+                      sx={{
+                        width: 8, height: 8, borderRadius: '50%', mt: 0.75, flexShrink: 0,
+                        background: n.is_read ? 'transparent' : '#f97316',
+                      }}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={n.is_read ? 500 : 700} sx={{ color: '#0f172a' }}>
+                        {n.title}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#64748b', display: 'block', wordBreak: 'break-word' }}>
+                        {n.message}
+                      </Typography>
+                      {n.created_at && (
+                        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 0.5 }}>
+                          {new Date(n.created_at).toLocaleString()}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                </MenuItem>
+              ))
+            )}
+          </Box>
+        </Menu>
+
         {/* Mobile Menu */}
         <Menu
           anchorEl={mobileMenuEl}
@@ -346,7 +563,7 @@ const Navbar = () => {
                   <Box>
                     <Typography variant="subtitle2" fontWeight="600">{user?.full_name}</Typography>
                     <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                      {user?.role === 'admin' ? 'Administrator' : 'Employee'}
+                      {roleLabel(user?.role)}
                     </Typography>
                   </Box>
                 </Box>
@@ -358,6 +575,9 @@ const Navbar = () => {
                   <Typography fontWeight={isActivePage(item.path) ? 600 : 500}>{item.label}</Typography>
                 </MenuItem>
               ))}
+              <MenuItem onClick={toggleMode}>
+                <Typography fontWeight="500">{dark ? 'Light theme' : 'Dark theme'}</Typography>
+              </MenuItem>
               <MenuItem onClick={() => navigateToPage('/profile')}
                 sx={{ background: isActivePage('/profile') ? '#f8fafc' : 'transparent' }}
               >

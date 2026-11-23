@@ -10,7 +10,7 @@ The DB columns for attendance are naive ``Date``/``Time``, so these helpers
 return naive values already shifted to the configured timezone.
 """
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
@@ -23,6 +23,21 @@ def _tz() -> ZoneInfo:
         # Fall back to UTC if the timezone name is invalid or the tz database
         # is unavailable, so the app still runs.
         return ZoneInfo("UTC")
+
+
+def utc_now() -> datetime:
+    """Timezone-aware current UTC time (for JWT expiry and other epoch math)."""
+    return datetime.now(timezone.utc)
+
+
+def utc_now_naive() -> datetime:
+    """
+    Naive UTC for legacy ``DateTime`` columns.
+
+    The ORM models store naive datetimes, so keep them naive to avoid changing
+    how values are persisted, but avoid the deprecated ``datetime.utcnow()``.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def now_local() -> datetime:

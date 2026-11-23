@@ -12,12 +12,15 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.time_utils import now_local, today_local
-from app.api.deps import get_optional_current_user
+from app.core.uploads import read_upload_with_limits
+from app.api.deps import get_current_user, get_optional_current_user
 from app.db.session import get_db
 from app.models import Attendance, User
 from app.schemas import AttendanceResponse, UserResponse
+from app.services.audit import record as audit_record
 from app.services.face_recognition import face_service
 from app.services.liveness import LivenessError, challenge_store, verify_challenge_frames
+from app.services.scheduling import is_early_leave, is_late, worked_minutes
 
 logger = logging.getLogger("smart_attendance.attendance")
 
@@ -88,7 +91,7 @@ async def mark_attendance(
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
             path = os.path.join(settings.UPLOAD_DIR, f"temp_{timestamp}_{i}.jpg")
             with open(path, "wb") as buffer:
-                buffer.write(await upload.read())
+                buffer.write(await read_upload_with_limits(upload))
             temp_paths.append(path)
         logger.info(f"Attendance frames received: {len(temp_paths)}")
 
@@ -187,8 +190,25 @@ async def mark_attendance(
             if existing_attendance.status == "absent":
                 existing_attendance.status = "present"
                 existing_attendance.time_in = now_local().time()
+                # Re-derive lateness from the user's shift for this arrival.
+                existing_attendance.is_late = is_late(
+                    existing_attendance.time_in, user.shift, today
+                )
                 db.commit()
                 db.refresh(existing_attendance)
+                audit_record(
+                    db,
+                    action="attendance.mark",
+                    actor=current_user,
+                    entity_type="attendance",
+                    entity_id=str(existing_attendance.id),
+                    details={
+                        "user": user.unique_id,
+                        "date": str(today),
+                        "changed_from": "absent",
+                        "confidence": confidence,
+                    },
+                )
                 return {
                     "message": f"Attendance updated for {user.full_name} - status changed from absent to present",
                     "user": UserResponse.model_validate(user),
@@ -197,11 +217,13 @@ async def mark_attendance(
                 }
             raise _already_marked(user, existing_attendance)
 
+        arrival = now_local().time()
         attendance = Attendance(
             user_id=user.id,
             date=today,
-            time_in=now_local().time(),
+            time_in=arrival,
             status="present",
+            is_late=is_late(arrival, user.shift, today),
         )
         db.add(attendance)
         try:
@@ -223,6 +245,14 @@ async def mark_attendance(
             raise _already_marked(user, winner)
         db.refresh(attendance)
         logger.info(f"Attendance marked for {user.full_name} ({user.unique_id})")
+        audit_record(
+            db,
+            action="attendance.mark",
+            actor=current_user,
+            entity_type="attendance",
+            entity_id=str(attendance.id),
+            details={"user": user.unique_id, "date": str(today), "confidence": confidence},
+        )
 
         return {
             "message": f"Attendance marked successfully for {user.full_name}",
@@ -242,3 +272,68 @@ async def mark_attendance(
                     os.remove(path)
                 except OSError:
                     pass
+
+
+@router.post("/checkout")
+async def checkout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Record the current user's departure for today.
+
+    Requires a logged-in user with a present check-in today. Computes the
+    early-departure flag from the user's shift when one is assigned. Kiosk
+    (unauthenticated) checkout is intentionally not offered: without a session
+    there is nothing tying the person at the kiosk to the account checking out.
+    """
+    today = today_local()
+    record = (
+        db.query(Attendance)
+        .filter(Attendance.user_id == current_user.id, Attendance.date == today)
+        .first()
+    )
+    if not record or record.status != "present" or not record.time_in:
+        raise HTTPException(
+            status_code=400,
+            detail="No check-in found for today. Mark attendance first.",
+        )
+    if record.time_out:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Already checked out at {record.time_out.strftime('%I:%M %p')}.",
+        )
+
+    record.time_out = now_local().time()
+    record.is_early_leave = is_early_leave(record.time_out, current_user.shift, today)
+    db.commit()
+    db.refresh(record)
+
+    minutes = worked_minutes(record.time_in, record.time_out)
+    audit_record(
+        db,
+        action="attendance.checkout",
+        actor=current_user,
+        entity_type="attendance",
+        entity_id=str(record.id),
+        details={
+            "user": current_user.unique_id,
+            "date": str(today),
+            "time_out": str(record.time_out),
+            "early_leave": record.is_early_leave,
+        },
+    )
+    logger.info(f"Checkout for {current_user.unique_id} at {record.time_out}")
+    return {
+        "message": "Checked out successfully",
+        "attendance": {
+            "id": record.id,
+            "date": record.date.isoformat(),
+            "time_in": record.time_in.isoformat() if record.time_in else None,
+            "time_out": record.time_out.isoformat() if record.time_out else None,
+            "status": record.status,
+            "is_late": record.is_late,
+            "is_early_leave": record.is_early_leave,
+            "worked_minutes": minutes,
+        },
+    }

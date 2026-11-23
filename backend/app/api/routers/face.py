@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.config import settings
+from app.core.uploads import read_upload_with_limits
 from app.db.session import get_db
 from app.models import User
+from app.services.audit import record as audit_record
 from app.services.face_recognition import FaceEnrollmentError, face_service
 from app.services.liveness import LivenessError, challenge_store, verify_challenge_frames
 
@@ -24,20 +26,34 @@ async def check_liveness_endpoint(
     file: UploadFile = File(...),
     current_user: User = Depends(deps.get_current_user),
 ):
-    """Real-time liveness detection (anti-spoofing)."""
+    """
+    Legacy single-image check: face presence only.
+
+    Despite the path name this endpoint runs NO anti-spoofing model — it
+    cannot distinguish a real face from a photo or a screen. The response
+    carries `anti_spoofing: false` and an unmeasured (null) spoof_probability
+    so it cannot be mistaken for one. Server-verified liveness is the
+    head-turn challenge submitted with /attendance/mark and /face/register.
+    Kept for API compatibility; the current frontend does not call it.
+    """
     temp_path = None
     try:
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
         temp_path = os.path.join(settings.UPLOAD_DIR, f"liveness_check_{timestamp}.jpg")
         with open(temp_path, "wb") as buffer:
-            buffer.write(await file.read())
+            buffer.write(await read_upload_with_limits(file))
 
         liveness_result = face_service.check_image_liveness(temp_path)
         return {
             "liveness_check": liveness_result,
             "timestamp": datetime.now().isoformat(),
             "status": "live_person" if liveness_result["is_live"] else "spoof_detected",
+            # Additive honesty flag: `status` above is kept verbatim for API
+            # compatibility, but nothing here performs anti-spoofing.
+            "anti_spoofing": False,
         }
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Liveness check failed")
         raise HTTPException(status_code=500, detail="Liveness check failed. Please try again.")
@@ -57,10 +73,12 @@ async def check_face_quality_endpoint(
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
         temp_path = os.path.join(settings.UPLOAD_DIR, f"quality_check_{timestamp}.jpg")
         with open(temp_path, "wb") as buffer:
-            buffer.write(await file.read())
+            buffer.write(await read_upload_with_limits(file))
 
         quality_result = face_service.check_image_quality(temp_path)
         return {"quality_check": quality_result, "timestamp": datetime.now().isoformat()}
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Quality check failed")
         raise HTTPException(status_code=500, detail="Quality check failed. Please try again.")
@@ -98,7 +116,7 @@ async def register_face(
             ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
             path = os.path.join(settings.UPLOAD_DIR, f"enroll_{current_user.unique_id}_{i}_{ts}.jpg")
             with open(path, "wb") as buffer:
-                buffer.write(await file.read())
+                buffer.write(await read_upload_with_limits(file))
             temp_paths.append(path)
 
         # Authoritative liveness check before anything reaches the gallery.
@@ -139,6 +157,14 @@ async def register_face(
 
         result = face_service.enroll_user(db, current_user, temp_paths)
         stats = result["statistics"]
+        audit_record(
+            db,
+            action="face.register",
+            actor=current_user,
+            entity_type="user",
+            entity_id=current_user.unique_id,
+            details={"images": stats["total_images"], "source": "self_service"},
+        )
         return {
             "message": "Face registration successful",
             "user_id": current_user.unique_id,

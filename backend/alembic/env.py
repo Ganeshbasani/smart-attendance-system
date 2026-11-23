@@ -1,5 +1,6 @@
 """Alembic migration environment, wired to the app's settings and metadata."""
 
+import logging
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -10,9 +11,15 @@ from app.db.base import Base
 import app.models  # noqa: F401  register models on Base.metadata
 
 config = context.config
-if config.config_file_name is not None:
-    # disable_existing_loggers=False so running migrations programmatically at
-    # app startup doesn't silence the application's own loggers.
+if config.config_file_name is not None and not logging.getLogger().handlers:
+    # Apply alembic.ini logging only for standalone CLI runs (alembic upgrade
+    # ...), where nothing has configured logging yet. When the app runs
+    # migrations at startup it has already called configure_logging(); calling
+    # fileConfig anyway would reconfigure the ROOT logger to alembic.ini's
+    # [logger_root] level=WARN, silently dropping every application INFO line
+    # (request logs, "Liveness metrics", audit trail) for the rest of the
+    # process. disable_existing_loggers=False additionally protects named
+    # loggers in the CLI case.
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Inject the database URL from application settings.
